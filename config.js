@@ -9,5 +9,5 @@
  */
 window.HQ_SETUP = {
   clientId: '547454018965-lqfdvfj6fpc8plasfvv5lt06u6m8pb2u.apps.googleusercontent.com',
-  scriptPin: '7wY-1eqpbMRzt3EuSOi1xN'
+  scriptPin: ''
 };
