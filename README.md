@@ -2,7 +2,7 @@
 
 G's private control room for the Showsum outreach engine: one app on desktop and phone that sits over the existing Showsum Pipeline and Exhibitor Leads scripts.
 
-**Release 2:** your live pipeline on the Overview (sending against the daily limit, every show with its prospects by stage and what's next, your turn, arrivals, shows ahead) and a Customers page (plans, money, passes, what's coming up). Release 1 brought the shell, the Google sign-in lock, Launchpad and Settings. HQ still only reads your sheets: nothing in the pipeline changes.
+**Release 3:** batches. The Overview's Departures board groups your existing prospects into batches, one show and one step at a time, using the Showsum menu's own skip rules. Release 2 brought the live Overview and Customers; release 1 the shell, the Google sign-in lock, Launchpad and Settings. HQ sends no email yet: you send each batch from the Showsum menu until autopilot (step 5).
 
 Lives at **https://hq.quick-sheet.com** (GitHub Pages with its own subdomain, so no other app shares its address).
 
@@ -14,7 +14,8 @@ HQ app (this repo, GitHub Pages)          no links, sheet IDs or secrets in here
    ▼
 HQ script (apps-script/Code.gs, a standalone Apps Script web app)
    │  checks the sign-in with Google: this app's client ID + ALLOWED_EMAIL, verified, not expired
-   ├── reads (never writes): Showsum Pipeline sheet · Exhibitor Leads data · Showsum database
+   ├── reads: Showsum Pipeline sheet · Exhibitor Leads data · Showsum database
+   ├── writes only: the Batch column on Prospects and its own Batches tab (when you make, move or remove a batch)
    ├── later: asks the pipeline web app to act (batches, inbox, autopilot)
    └── Launchpad links and settings live in its Script Properties
 HQ app ──► Exhibitor Leads web app directly (later release; it accepts the same sign-in)
@@ -38,7 +39,7 @@ HQ app ──► Exhibitor Leads web app directly (later release; it accepts the
 - **Locked to your script.** `config.js` holds a fingerprint of your HQ script's address (`scriptPin`), not the address itself. HQ refuses to connect to any other script, whether typed in or from a link. HQ also refuses to run inside another page.
 - The app never sees Script Property values, only whether each one is set.
 - Your pipeline and customers are kept in the app's memory only, never saved on the device. Arrivals never show an email address.
-- HQ's script only reads the three sheets (the tests fail if it ever tries to write to one). The only things it saves are its own settings, in its Script Properties: the Launchpad, the name HQ calls you, and which customers are tests.
+- HQ's script reads the three sheets. In the pipeline sheet it writes only the Batch column at the end of Prospects and its own Batches tab, and only when you make, move or remove a batch; the tests fail if it writes anywhere else. Before writing the Batch column it reads the Code column again, and if any row has moved it saves nothing. Its own settings live in its Script Properties: the Launchpad, the name HQ calls you, and which customers are tests.
 - The sign-in sits in the browser tab's session storage and is gone when the tab closes. The app keeps the connection (script address, client ID) and a copy of your Launchpad on the device for offline opening.
 - The service worker only keeps the app's own files. Nothing from your scripts is cached.
 - With the Google Cloud OAuth audience set to **Internal**, only accounts in your own Workspace can even start the sign-in.
@@ -77,7 +78,20 @@ If `Code.gs` changed, also bump `BUILD` in `Code.gs` and `EXPECT_BUILD` in `hq.j
 - **Apps Script:** paste `Code.gs` → Deploy → Manage deployments → pencil → Version: New version → Deploy. The address stays the same.
 - **GitHub:** upload the changed files (Add file → Upload files → Commit), wait for the Pages tick, then reload HQ.
 
+## Batches
+
+- A batch is a group of prospects from one show that goes through first email, Day 2 and Last touch together (or Season planning, for those not emailed before their show).
+- HQ only offers rows the Showsum menu would send, by the menu's own rules: a code and an email, Can email Yes, a stage that can be emailed, not opted out on any row, not already emailed for the same business in the same sector (a blank Sector matches every sector), the named email not already sent to that business with the same subject, and one row per address in a batch. Show dates are read the way the pipeline reads them. Engaged and Call booked prospects are yours: HQ leaves them out and lists them under Your turn.
+- Each member's batch ID (B01, B02…) goes in the Batch column. To send a batch from the menu, filter Prospects by **Batch** and by **Stage** (New for first emails and Season planning, Emailed for Day 2 and Last touch), select the rows, and use the Showsum menu. The Stage filter leaves out anyone who has moved on since, such as a prospect who became Engaged or bought a pass. HQ shows the exact filter on each batch.
+- IDs are never reused. Removing a batch clears its Batch cells and marks it Removed on the Batches tab. HQ writes only the cells that change, keeps text that looks like a formula as text, and saves nothing if Prospects' rows or columns moved while it was saving.
+
 ## Releases
+
+- **3** (1 Nov 2026):
+  - Departures board on the Overview: batches with their stage (first email, Day 2, Last touch, done), what's ready now, how to send it from the menu, move up or down, remove; and the groups ready to become batches, with Make batch.
+  - Your turn: a card for each batch with rows ready, and one for engaged prospects whose next email is due.
+  - Your shows use the menu's skip rules too, and leave engaged prospects to you.
+  - Customers: refunds come off the money taken; purchases counted at list price (no sale row) are labelled; the Ended filter and wording match each customer's real status.
 
 - **2** (1 Nov 2026):
   - Overview over your live pipeline, read-only:

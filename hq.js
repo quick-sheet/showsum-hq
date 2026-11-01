@@ -1,9 +1,9 @@
-/* Showsum HQ · app (release 2: live Overview and Customers, read-only; shell, sign-in, Launchpad, Settings) */
+/* Showsum HQ · app (release 3: batches; live Overview and Customers; shell, sign-in, Launchpad, Settings) */
 (function () {
   'use strict';
 
-  var APP_VERSION = 2;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
-  var EXPECT_BUILD = 2;      // the HQ Apps Script release this app expects
+  var APP_VERSION = 3;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
+  var EXPECT_BUILD = 3;      // the HQ Apps Script release this app expects
   var LS = { config: 'hq.config', links: 'hq.links', user: 'hq.user', name: 'hq.name' };
   var SS_TOKEN = 'hq.idToken';
   var GSI_SRC = 'https://accounts.google.com/gsi/client';
@@ -556,7 +556,7 @@
     ['Sectors', 'Lines, show lists, your turn'],
     ['Phone', 'Polish for your phone']
   ];
-  var DONE_STEPS = 2;
+  var DONE_STEPS = 3;
 
   // Your turn: what each next action means, in the order they're shown. First emails are left for batches (step 3).
   var TURN = [
@@ -566,8 +566,8 @@
     ['Send thank you', 'Thank-yous for your show chats.'],
     ['Visit at the show', 'You emailed them before a show you’re going to: drop by their stand.'],
     ['Find a working email', 'Their email bounced: find another address.'],
-    ['Follow up after the show', 'Due a follow-up. From step 3 these go out as Day 2 batches.'],
-    ['Follow up', 'Due a follow-up. From step 3 these go out as Day 2 batches.'],
+    ['Follow up after the show', 'Due a follow-up: make a Day 2 batch for them on the Departures board.'],
+    ['Follow up', 'Due a follow-up: make a Day 2 batch for them on the Departures board.'],
     ['Check earlier row', 'Already in the sheet from another show: check the earlier row.'],
     ['Ask before emailing', 'Sole trader or no consent yet: ask before emailing.'],
     ['Find contact details', 'No email address yet.'],
@@ -619,7 +619,7 @@
     var html = head(eyebrow, greeting(), lede, refreshBtn('ov-refresh', S.busy.ov, S.ovAt));
     if (S.ovErr) html += '<p class="banner" style="margin:0" role="alert"><span class="grow">' + esc(S.ovErr) + '</span></p>';
     html += sendingPanel(o) + tilesRow(o);
-    html += '<div class="ov-grid"><div class="ov-main">' + pipelinePanel(o) + emailsAheadPanel(o) + '</div>' +
+    html += '<div class="ov-grid"><div class="ov-main">' + departuresPanel(o) + pipelinePanel(o) + emailsAheadPanel(o) + '</div>' +
       '<div class="ov-side">' + turnPanel(o) + arrivalsPanel(o) + '</div></div>';
     html += buildLine();
     return html;
@@ -645,7 +645,7 @@
       '<div class="send-num"><span class="eyebrow">Sent today</span><span class="big">' + sd.today + '<small>/' + sd.limit + '</small></span>' +
       '<span class="legend"><span><i class="k on"></i>' + sd.today + ' sent</span><span><i class="k"></i>' + spare + ' spare today</span></span></div></div>' +
       '<div class="send-facts"><span class="eyebrow">Sending · last 7 days</span><ul>' + lines.join('') + '</ul>' +
-      '<p class="note" style="margin:0">Rows already in the pipeline stay paused until you start them as batches in step 3. Until then, the Showsum menu still sends.</p></div></section>';
+      '<p class="note" style="margin:0">HQ doesn’t send yet: send each batch from the Showsum menu until autopilot (step 5). Rows outside a batch stay paused.</p></div></section>';
   }
 
   function spark(values, colour) {
@@ -719,7 +719,7 @@
         '<span class="show-count mono">' + plural(s.prospects, 'prospect') + '</span></article>';
     }).join('');
     return '<section class="panel" aria-labelledby="pl-h"><div class="panel-head"><div><span class="eyebrow">Pipeline · read-only</span><h2 class="h2" id="pl-h">Your shows</h2>' +
-      '<span class="sub small">' + plural(t.prospects, 'prospect') + ': ' + t.emailed + ' emailed, ' + t.notEmailed + ' you can email and haven’t yet, ' + (t.hot + t.warm) + ' hot or warm, ' + t.bounced + ' bounced. Paused until you start batches in step 3.</span></div>' +
+      '<span class="sub small">' + plural(t.prospects, 'prospect') + ': ' + t.emailed + ' emailed, ' + t.notEmailed + ' you can email and haven’t yet, ' + (t.hot + t.warm) + ' hot or warm, ' + t.bounced + ' bounced. Group them on the Departures board.</span></div>' +
       (o.sheetUrl ? '<a class="btn small" href="' + esc(o.sheetUrl) + '" target="_blank" rel="noopener noreferrer">Open the sheet' + I.out + '</a>' : '') + '</div>' +
       (rows || '<p class="note" style="margin:0">No prospects in the pipeline yet.</p>') + '</section>';
   }
@@ -777,7 +777,15 @@
       return '<article class="ticket"><span class="t-top"><span class="round">' + t.count + '</span><span class="t-tag">' + esc(where.toUpperCase()) + '</span></span>' +
         '<b class="t-title">' + esc(t.action) + '</b><span class="t-sub">' + esc(hint(t.action) + late) + '</span></article>';
     })).join('');
-    var count = (o.setup || []).length + items.length;
+    var due = (o.batches || []).filter(function (b) { return b.dueNow && MENU_HOW[b.stage]; });
+    var batchCards = due.map(function (b) {
+      return '<article class="ticket"><span class="t-top"><span class="round">' + b.dueNow + '</span><span class="t-tag">BATCH ' + esc(b.id) + ' · ' + esc(b.show.toUpperCase()) + '</span></span>' +
+        '<b class="t-title">Send ' + esc(b.id) + ': ' + esc(STEP_NAME[b.stage]) + '</b><span class="t-sub">In Prospects, filter Batch to ' + esc(b.id) + ' and Stage to ' + esc(b.stageFilter) + ', select the rows, then ' + esc(MENU_HOW[b.stage]) + '.</span></article>';
+    }).join('');
+    var yours = o.yours && o.yours.count ? '<article class="ticket"><span class="t-top"><span class="round">' + o.yours.count + '</span><span class="t-tag">' + esc(o.yours.shows.map(function (s) { return s.name + (o.yours.shows.length > 1 ? ' ' + s.count : ''); }).join(' · ').toUpperCase()) + '</span></span>' +
+      '<b class="t-title">Write to your engaged prospects</b><span class="t-sub">Hot or warm on your website, so they’re kept out of batches. Their next email is due: write to them yourself.</span></article>' : '';
+    cards = batchCards + yours + cards;
+    var count = (o.setup || []).length + items.length + due.length + (yours ? 1 : 0);
     return '<section class="turn" aria-labelledby="turn-h"><div class="turn-head"><h2 id="turn-h">Your turn</h2>' + (count ? '<span class="count">' + count + '</span>' : '') + '</div>' +
       '<p class="sub small" style="margin:0">Next actions due by today in your sheet, grouped. Yellow means it’s waiting on you.</p>' +
       (cards || '<p class="note" style="margin:0">Nothing waiting on you today.</p>') +
@@ -801,14 +809,112 @@
       return '<div class="stop ' + cls + '" title="' + esc(s[1]) + '"><span class="st"></span><small>STEP ' + (i + 1) + '</small><span class="t">' + esc(s[0]) + '</span></div>';
     }).join('');
     return '<section class="panel" aria-labelledby="ov-line"><div class="panel-head"><div><span class="eyebrow">Build</span><h2 class="h3" id="ov-line">The HQ line</h2>' +
-      '<span class="sub small">Each stop is one release. Next: start batches from your prospects.</span></div></div>' +
+      '<span class="sub small">Each stop is one release. Next: an inbox for replies and bounces.</span></div></div>' +
       '<div class="line-track" role="list">' + stops + '</div></section>';
   }
 
   function bindOverview() {
+    bindDepartures();
     var r = $('#ov-refresh'); if (r) r.onclick = function () { fetchOverview(true); };
     var t = $('#ov-retry'); if (t) t.onclick = function () { S.ovErr = ''; renderRoute(); fetchOverview(true); };
     if (!S.ov && !S.ovErr && !S.busy.ov && S.token) fetchOverview(false);
+  }
+
+  // ------------------------------------------------------------------------------------------------ Batches (release 3)
+  var STEP_NAME = { first: 'First email', day2: 'Day 2', last: 'Last touch', season: 'Season planning', done: 'Done' };
+  var MENU_HOW = {
+    first: 'Showsum → Send the first email (A or B) to the selected rows',
+    day2: 'Showsum → Send another email to the selected rows…, then type Day 2 numbers',
+    last: 'Showsum → Send another email to the selected rows…, then type Last touch',
+    season: 'Showsum → Send another email to the selected rows…, then type Season planning'
+  };
+
+  function batchStatus(b) {
+    if (b.stage === 'done') return 'Done: everyone has had every email, or left the sequence';
+    var name = STEP_NAME[b.stage];
+    if (b.dueNow) {
+      var t = b.dueNow + ' ready for ' + name;
+      if (b.stage === 'first' && b.closes) t += dayDiff(b.closes) >= 0 ? ' · window open until ' + fmtDay(b.closes) : ' · window closed ' + fmtDay(b.closes) + ': the menu still sends until the show starts';
+      return t;
+    }
+    return name + ' from ' + fmtDay(b.nextDue);
+  }
+
+  function stageTrack(b) {
+    var steps = b.startStep === 'Season planning' ? ['season', 'done'] : ['first', 'day2', 'last', 'done'];
+    var at = steps.indexOf(b.stage);
+    return '<ol class="track" aria-label="' + esc(b.label + ': ' + STEP_NAME[b.stage]) + '">' + steps.map(function (k, i) {
+      var cls = i < at ? 'done' : i === at ? (b.dueNow ? 'now go' : 'now') : 'todo';
+      return '<li class="' + cls + '"><span class="dot"></span><span class="lab">' + esc(STEP_NAME[k]) + '</span></li>';
+    }).join('') + '</ol>';
+  }
+
+  function departuresPanel(o) {
+    var bs = o.batches || [], ps = o.proposals || [];
+    var rows = bs.map(function (b, i) {
+      var c = b.counts || {};
+      var extra = [];
+      if (c.yours) extra.push(c.yours + ' engaged: yours');
+      if (c.out) extra.push(c.out + ' out (opted out, bounced or can’t email)');
+      return '<article class="dep" style="--lc:' + lineVar(b.line) + '">' +
+        '<span class="dep-pos mono">' + b.position + '</span>' +
+        '<div class="dep-main"><div class="dep-head"><span class="dep-name">' + lineDot(b.line, b.sector) + '<b>' + esc(b.id) + ' · ' + esc(b.show) + '</b></span>' +
+        '<span class="chip' + (b.dueNow ? ' warn' : b.stage === 'done' ? ' dim' : '') + '">' + esc(STEP_NAME[b.stage]) + '</span></div>' +
+        stageTrack(b) +
+        '<span class="sub small">' + esc(batchStatus(b)) + '</span>' +
+        '<span class="muted small">' + esc(plural(b.members, 'prospect') + ' · started at ' + b.startStep + (b.sent.first ? ' · ' + b.sent.first + ' first emails sent' : '') + (b.sent.day2 ? ', ' + b.sent.day2 + ' Day 2' : '') + (b.sent.last ? ', ' + b.sent.last + ' Last touch' : '') + (extra.length ? ' · ' + extra.join(', ') : '')) + '</span>' +
+        (b.dueNow && MENU_HOW[b.stage] ? '<p class="how small">To send: in Prospects, filter <b>Batch</b> to <b>' + esc(b.id) + '</b> and <b>Stage</b> to <b>' + esc(b.stageFilter) + '</b>, select the rows, then ' + esc(MENU_HOW[b.stage]) + '. The menu skips anyone who shouldn’t get it.</p>' : '') +
+        '</div><div class="dep-tools">' +
+        '<button class="icon-btn" data-bmove="up" data-id="' + esc(b.id) + '" aria-label="Move ' + esc(b.id) + ' up"' + (i === 0 ? ' disabled' : '') + '>' + I.up + '</button>' +
+        '<button class="icon-btn" data-bmove="down" data-id="' + esc(b.id) + '" aria-label="Move ' + esc(b.id) + ' down"' + (i === bs.length - 1 ? ' disabled' : '') + '>' + I.down + '</button>' +
+        '<button class="icon-btn" data-bremove="' + esc(b.id) + '" aria-label="Remove ' + esc(b.id) + '">' + I.bin + '</button></div></article>';
+    }).join('');
+    var props = ps.map(function (p) {
+      var when;
+      if (p.step === 'first') when = !p.closes ? '' : p.opens && dayDiff(p.opens) > 0 ? 'window opens ' + fmtDay(p.opens) : dayDiff(p.closes) >= 0 ? 'window open until ' + fmtDay(p.closes) : 'window closed ' + fmtDay(p.closes) + ', show starts ' + fmtDay(p.starts);
+      else if (p.step === 'season') when = 'for ' + fmtDay(p.due);
+      else when = dayDiff(p.due) <= 0 ? 'due since ' + fmtDay(p.due) : 'due from ' + fmtDay(p.due);
+      return '<div class="prop">' + lineDot(p.line, p.sector) + '<span class="prop-tx"><b>' + esc(p.show) + ' · ' + esc(p.stepLabel) + '</b><span class="muted small">' + esc(plural(p.count, 'prospect') + (when ? ' · ' + when : '')) + '</span></span>' +
+        '<button class="btn small" data-make="' + esc(p.showId) + '" data-step="' + esc(p.step) + '" data-count="' + p.count + '" data-label="' + esc(p.show + ' · ' + p.stepLabel) + '">' + I.plus + 'Make batch</button></div>';
+    }).join('');
+    return '<section class="panel" aria-labelledby="dep-h"><div class="panel-head"><div><span class="eyebrow">Batches · set up only</span><h2 class="h2" id="dep-h">Departures</h2>' +
+      '<span class="sub small">A batch is a group from one show that goes through first email, Day 2 and Last touch together. The order is who goes first once autopilot runs (step 5); until then, send from the Showsum menu.</span></div>' +
+      (o.prospectsUrl ? '<a class="btn small" href="' + esc(o.prospectsUrl) + '" target="_blank" rel="noopener noreferrer">Open Prospects' + I.out + '</a>' : '') + '</div>' +
+      (rows ? '<div class="deps">' + rows + '</div>' : '<p class="note" style="margin:0">No batches yet. Make one from the groups below: nothing is sent, and you can remove it again.</p>') +
+      (props ? '<div class="props"><span class="eyebrow">Ready to batch</span>' + props + '</div>' : '') + '</section>';
+  }
+
+  function bindDepartures() {
+    var main = $('#main');
+    main.onclick = function (ev) {
+      var mk = ev.target.closest('[data-make]'), mv = ev.target.closest('[data-bmove]'), rm = ev.target.closest('[data-bremove]');
+      if (mk) {
+        var n = Number(mk.dataset.count);
+        if (!window.confirm('Make a batch of ' + plural(n, 'prospect') + ': ' + mk.dataset.label + '?\n\nHQ writes the batch ID in their Batch column in Prospects and adds it to the Batches tab. Nothing is sent, and you can remove it again.')) return;
+        batchCall(mk, 'makeBatch', { showId: mk.dataset.make, step: mk.dataset.step }, function (j) { return 'Made ' + j.made.label + ' (' + plural(j.made.size, 'prospect') + ')'; });
+      } else if (mv) {
+        batchCall(mv, 'moveBatch', { id: mv.dataset.id, dir: mv.dataset.bmove }, function () { return 'Order saved'; });
+      } else if (rm) {
+        if (!window.confirm('Remove ' + rm.dataset.bremove + '? Its Batch cells in Prospects are cleared and it’s marked Removed on the Batches tab. Emails already sent stay sent.')) return;
+        batchCall(rm, 'removeBatch', { id: rm.dataset.bremove }, function (j) { return 'Removed ' + j.removed.id; });
+      }
+    };
+  }
+
+  function batchCall(btn, action, data, done) {
+    if (S.busy.batch) return;
+    S.busy.batch = true;
+    btn.disabled = true;
+    call(action, data, { timeout: 120000 }).then(function (j) {
+      S.busy.batch = false;
+      if (j.overview) { S.ov = j.overview; S.ovAt = Date.now(); }
+      if (S.route === 'overview') renderRoute();
+      toast(done(j));
+    }, function (e) {
+      S.busy.batch = false;
+      btn.disabled = false;
+      toast(e.kind === 'signin' ? 'Sign in again, then try once more.' : e.message, true);
+    });
   }
 
   function pageSoon(which) {
@@ -856,7 +962,9 @@
     var title = c.active ? plural(c.active, 'paying customer') : 'No paying customers yet';
     var lede = c.active
       ? '<b class="hl">' + money(c.mrr) + '</b> a month coming in on subscriptions, ' + money(c.taken) + ' taken so far' + (soon ? ', and ' + plural(soon, 'pass or plan', 'passes or plans') + ' ending this week' : '') + '.'
-      : (c.total ? 'Everyone who has paid has now ended. ' : '') + 'Sales from your website land here with their plan. Your own account and example addresses are left out; mark any other tests below.';
+      : c.window ? 'No one is on an active plan or pass right now. ' + plural(c.window, 'pass is', 'passes are') + ' in the plan window, so they can still upgrade.'
+      : c.total ? 'No one is on an active plan or pass right now. Your own account and example addresses are left out; mark any other tests below.'
+      : 'Sales from your website land here with their plan. Your own account and example addresses are left out; mark any other tests below.';
     var html = head(eyebrow, title, lede, refreshBtn('cu-refresh', S.busy.cu, S.cuAt));
     if (c.note) html += '<p class="banner" style="margin:0"><span class="grow">' + esc(c.note) + '</span></p>';
 
@@ -865,7 +973,7 @@
     var annual = c.plans.filter(function (p) { return p.plan === 'Annual'; })[0] || { active: 0 };
     html += '<section class="kpis" aria-label="Money and plans">' +
       kpiPlain('Monthly recurring', money(c.mrr), (monthly.active ? monthly.active + ' monthly' : 'No monthly') + (annual.active ? ', ' + annual.active + ' annual counted monthly' : '') + '. Passes and Own-it are one-off.') +
-      kpiPlain('Taken so far', money(c.taken), c.refunds ? 'Before ' + plural(c.refunds, 'refund') : 'Everything paid, all plans') +
+      kpiPlain('Taken so far', money(c.taken), c.assumed ? 'Includes ' + money(c.assumed) + ' at list price, with no sale row' : c.unpricedRefunds ? 'After refunds; ' + plural(c.unpricedRefunds, 'refund') + ' with no amount' : c.refunds ? 'After refunds' : 'Everything paid, all plans') +
       kpiPlain('On a pass', String(c.passes.onPass), plural(c.passes.sold, 'pass', 'passes') + ' sold') +
       kpiPlain('Subscribers', String(subs), c.passes.upgraded ? plural(c.passes.upgraded, 'came', 'came') + ' from a pass' : 'Monthly and Annual') +
       '</section>';
@@ -891,13 +999,15 @@
     var filters = [['all', 'All', c.list.length], ['active', 'Active', c.list.filter(function (x) { return x.active; }).length],
       ['pass', 'Passes', c.list.filter(function (x) { return x.plan === 'Event Pass'; }).length],
       ['subs', 'Subscriptions', c.list.filter(function (x) { return x.plan === 'Monthly' || x.plan === 'Annual'; }).length],
-      ['ended', 'Ended', c.list.filter(function (x) { return !x.active; }).length]];
+      ['ended', 'Ended', c.list.filter(function (x) { return x.tone === 'off'; }).length]];
+    if (c.window) filters.splice(4, 0, ['window', 'In plan window', c.window]);
     var f = S.cuFilter, q = S.cuFind.trim().toLowerCase();
     var shown = c.list.filter(function (x) {
       if (f === 'active' && !x.active) return false;
       if (f === 'pass' && x.plan !== 'Event Pass') return false;
       if (f === 'subs' && x.plan !== 'Monthly' && x.plan !== 'Annual') return false;
-      if (f === 'ended' && x.active) return false;
+      if (f === 'ended' && x.tone !== 'off') return false;
+      if (f === 'window' && x.status !== 'Plan window open') return false;
       return !q || (x.name + ' ' + x.contact + ' ' + x.show + ' ' + x.sector).toLowerCase().indexOf(q) >= 0;
     });
     var rows = shown.map(function (x) {
@@ -905,7 +1015,7 @@
         '<span class="c-name" role="cell">' + lineDot(x.line, x.sector) + '<span><b>' + esc(x.name) + '</b><span class="muted small">' + esc([x.contact, x.show].filter(Boolean).join(' · ')) + '</span></span></span>' +
         '<span class="c-plan" role="cell"><span class="pdot" style="background:' + PLAN_LINE[x.plan] + '"></span>' + esc(x.plan) + (x.upgraded ? '<span class="muted small"> from a pass</span>' : '') + '</span>' +
         '<span class="c-since mono small" role="cell">' + esc(fmtDate(x.since)) + '</span>' +
-        '<span class="c-paid" role="cell">' + money(x.paid) + '</span>' +
+        '<span class="c-paid" role="cell">' + money(x.paid) + (x.listPrice ? '<span class="muted small" title="No Sales row for this purchase, so HQ counts the plan’s list price">list price, no sale row</span>' : '') + '</span>' +
         '<span class="c-next small" role="cell">' + (x.next ? esc(x.next.label) + '<span class="muted"> ' + esc(fmtDay(x.next.date)) + '</span>' : '<span class="muted">—</span>') + '</span>' +
         '<span class="c-status" role="cell"><span class="chip ' + (x.tone === 'ok' ? 'live' : x.tone === 'warn' ? 'warn' : 'dim') + '">' + esc(x.status) + '</span>' +
         (x.setup ? '<span class="muted small">Set-up ' + x.setup.done + '/' + x.setup.of + '</span>' : '') + '</span>' +

@@ -376,6 +376,46 @@ a.kpi:hover { transform: translateY(-2px); border-color: var(--line-2); color: v
   .find { max-width: none; }
 }
 
+
+/* ---------- Release 3: batches ---------- */
+.deps { display: flex; flex-direction: column; gap: 10px; }
+.dep { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 14px 14px 14px 18px; border-radius: 16px; background: var(--panel-2); border: 1px solid var(--line-soft); overflow: hidden; }
+.dep::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: var(--lc); }
+.dep-pos { font-size: 18px; font-weight: 600; color: var(--muted); padding-top: 2px; }
+.dep-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dep-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.dep-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dep-name b { font-stretch: 112%; font-size: 16px; font-weight: 800; overflow-wrap: anywhere; }
+.dep-tools { display: flex; gap: 6px; }
+.dep-tools .icon-btn { width: 36px; height: 36px; border-radius: 10px; }
+.track { display: flex; margin: 2px 0 0; padding: 0; list-style: none; }
+.track li { flex: 1 1 0; display: flex; flex-direction: column; gap: 6px; position: relative; min-width: 0; }
+.track li:last-child { flex: 0 0 auto; }
+.track li::before { content: ""; position: absolute; left: 12px; right: 0; top: 5px; border-top: 2px dashed var(--line-2); }
+.track li:last-child::before { display: none; }
+.track li.done::before { border-top: 3px solid var(--lc); top: 4px; }
+.track .dot { position: relative; z-index: 1; width: 12px; height: 12px; border-radius: 50%; box-sizing: border-box; border: 2px solid var(--line-2); background: var(--panel-2); }
+.track li.done .dot { background: var(--lc); border-color: var(--lc); }
+.track li.now .dot { border: 3px solid var(--muted); }
+.track li.now.go .dot { border-color: var(--yellow); box-shadow: 0 0 0 3px rgba(255,210,63,.2); }
+.track .lab { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 6px; }
+.track li.now .lab { color: var(--text); font-weight: 600; }
+.how { margin: 0; padding: 8px 10px; border-radius: 10px; background: rgba(255,210,63,.07); color: var(--sub); }
+.how b { color: var(--yellow); }
+.props { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.props .eyebrow { margin: 6px 0 4px; }
+.prop { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.props .eyebrow + .prop { border-top: 0; }
+.prop-tx { display: flex; flex-direction: column; min-width: 0; }
+.prop-tx b { font-weight: 600; overflow-wrap: anywhere; }
+.c-paid { display: flex; flex-direction: column; min-width: 0; }
+@media (max-width: 760px) {
+  .dep { grid-template-columns: 26px minmax(0, 1fr); }
+  .dep-tools { grid-column: 2; }
+  .prop { grid-template-columns: 12px minmax(0, 1fr); }
+  .prop .btn { grid-column: 2; justify-self: start; }
+}
+
 @keyframes growx { from { transform: scaleX(0); } }
 @keyframes growy { from { transform: scaleY(0); } }
 

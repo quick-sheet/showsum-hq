@@ -1,11 +1,11 @@
 /* Showsum HQ service worker: keeps the app shell for offline opening. Never caches anything from your scripts. */
-const CACHE = 'showsum-hq-v2';
+const CACHE = 'showsum-hq-v3';
 const SHELL = [
   './',
   'index.html',
-  'config.js?v=2',
-  'hq.css?v=2',
-  'hq.js?v=2',
+  'config.js?v=3',
+  'hq.css?v=3',
+  'hq.js?v=3',
   'manifest.webmanifest',
   'icon.svg',
   'icon-192.png',
@@ -36,7 +36,7 @@ self.addEventListener('fetch', (e) => {
     // The page and config.js: network first, so your edits arrive at once; the saved copy when offline.
     // config.js skips the browser's own 10-minute copy (GitHub Pages sends max-age=600) and asks GitHub each time.
     const nav = req.mode === 'navigate';
-    const key = nav ? 'index.html' : 'config.js?v=2';
+    const key = nav ? 'index.html' : 'config.js?v=3';
     e.respondWith(
       fetch(req, nav ? undefined : { cache: 'no-cache' }).then((res) => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(key, copy)); }
