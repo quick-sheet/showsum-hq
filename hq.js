@@ -1,10 +1,10 @@
-/* Showsum HQ · app (release 1: shell, sign-in, Launchpad, Settings) */
+/* Showsum HQ · app (release 2: live Overview and Customers, read-only; shell, sign-in, Launchpad, Settings) */
 (function () {
   'use strict';
 
-  var APP_VERSION = 1;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
-  var EXPECT_BUILD = 1;      // the HQ Apps Script release this app expects
-  var LS = { config: 'hq.config', links: 'hq.links', user: 'hq.user' };
+  var APP_VERSION = 2;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
+  var EXPECT_BUILD = 2;      // the HQ Apps Script release this app expects
+  var LS = { config: 'hq.config', links: 'hq.links', user: 'hq.user', name: 'hq.name' };
   var SS_TOKEN = 'hq.idToken';
   var GSI_SRC = 'https://accounts.google.com/gsi/client';
   var URL_RE = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec$/;
@@ -18,7 +18,8 @@
   var S = {
     config: null, token: null, claims: null, user: null, links: null, props: null, status: null, statusErr: '',
     build: null, route: 'overview', editing: false, draft: null, offline: false, refused: false, pin: '',
-    gsi: null, waiters: [], installEvt: null, banner: '', busy: {}
+    gsi: null, waiters: [], installEvt: null, banner: '', busy: {},
+    hqName: '', ov: null, ovErr: '', cu: null, cuErr: '', cuFilter: 'all', cuFind: ''
   };
 
   // ------------------------------------------------------------------------------------------------ icons
@@ -104,9 +105,10 @@
     var hh = ('0' + d.getHours()).slice(-2), mm = ('0' + d.getMinutes()).slice(-2);
     return days[d.getDay()] + ' ' + d.getDate() + ' ' + mons[d.getMonth()] + ' · ' + hh + ':' + mm;
   }
+  function callMe() { return S.hqName || firstInitial(); }
   function greeting() {
     var h = new Date().getHours();
-    return (h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening') + ', ' + firstInitial();
+    return (h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening') + ', ' + callMe();
   }
   function uid() { return Math.random().toString(36).slice(2, 12).replace(/[^a-z0-9]/g, 'x').padEnd(10, 'x'); }
 
@@ -190,7 +192,7 @@
   function signOut() {
     var done = function () {
       try { if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
-      S.token = null; S.claims = null; S.user = null; S.links = null; S.status = null;
+      S.token = null; S.claims = null; S.user = null; S.links = null; S.status = null; S.ov = null; S.cu = null;
       sset(SS_TOKEN, null);
       store(LS.user, null); store(LS.links, null);
       renderSignin();
@@ -272,9 +274,10 @@
   }
 
   function forgetConnection() {
-    [LS.config, LS.links, LS.user].forEach(function (k) { store(k, null); });
+    [LS.config, LS.links, LS.user, LS.name].forEach(function (k) { store(k, null); });
     sset(SS_TOKEN, null);
     S.config = null; S.token = null; S.user = null; S.links = null; S.status = null; S.gsi = null; S.pin = '';
+    S.ov = null; S.cu = null; S.hqName = '';
   }
 
   function readConnectLink() {
@@ -290,13 +293,16 @@
 
   function startApp() {
     S.route = routeFromHash();
+    S.ovErr = ''; S.cuErr = '';
     S.user = S.user || load(LS.user);
     S.links = S.links || load(LS.links);
+    S.hqName = S.hqName || load(LS.name) || '';
     renderShell();
     renderRoute();
     call('hello').then(function (j) {
       S.offline = false;
       S.user = j.user; store(LS.user, j.user);
+      S.hqName = j.hqName || ''; store(LS.name, S.hqName);
       S.props = j.props;
       if (!S.editing) { S.links = j.links; store(LS.links, j.links); }
       renderShell(); renderRoute();
@@ -310,14 +316,16 @@
 
   function keepSignedIn() {
     if (document.hidden || !S.token || S.waiters.length) return;
-    if (!tokenOk(S.token, 300)) reauth().catch(function () { /* banner already offers a button */ });
+    if (!tokenOk(S.token, 300)) { reauth().catch(function () { /* banner already offers a button */ }); return; }
+    // The Overview reads the sheet again every 5 minutes while it's on screen.
+    if (S.route === 'overview' && S.ov && !S.busy.ov && Date.now() - (S.ovAt || 0) > 5 * 60000) fetchOverview(false);
   }
 
   function refused() {
     S.refused = true;
     var email = (S.claims && S.claims.email) || 'that account';
     try { google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
-    S.token = null; sset(SS_TOKEN, null); store(LS.user, null); store(LS.links, null); S.user = null; S.links = null;
+    S.token = null; sset(SS_TOKEN, null); store(LS.user, null); store(LS.links, null); S.user = null; S.links = null; S.ov = null; S.cu = null;
     renderSignin('Your HQ script turned away ' + email + '. HQ only opens for the account in ALLOWED_EMAIL, signed in to this app’s client ID (HQ_CLIENT_ID).');
   }
 
@@ -430,7 +438,7 @@
   function renderShell() {
     var avatar = S.user && S.user.picture
       ? '<span class="avatar" title="' + esc(S.user.email || '') + '"><img src="' + esc(S.user.picture) + '" alt="" referrerpolicy="no-referrer"></span>'
-      : '<span class="avatar" aria-hidden="true">' + esc(firstInitial()) + '</span>';
+      : '<span class="avatar" aria-hidden="true">' + esc(callMe().charAt(0).toUpperCase()) + '</span>';
     var navA = function (n, cls) {
       var cur = S.route === n[0] ? ' aria-current="page"' : '';
       return cls === 'rail'
@@ -482,14 +490,17 @@
     if (S.route === 'overview') html = pageOverview();
     else if (S.route === 'sectors') html = pageSoon('sectors');
     else if (S.route === 'inbox') html = pageSoon('inbox');
-    else if (S.route === 'customers') html = pageSoon('customers');
+    else if (S.route === 'customers') html = pageCustomers();
     else if (S.route === 'launchpad') html = pageLaunchpad();
     else if (S.route === 'settings') html = pageSettings();
+    main.onclick = null;
     main.innerHTML = bannerHtml() + html;
     document.title = (NAV.filter(function (n) { return n[0] === S.route; })[0] || NAV[0])[1] + ' · Showsum HQ';
     bindBanner();
     if (S.route === 'launchpad') bindLaunchpad();
     if (S.route === 'settings') bindSettings();
+    if (S.route === 'overview') bindOverview();
+    if (S.route === 'customers') bindCustomers();
   }
 
   function head(eyebrow, title, lede, right) {
@@ -498,7 +509,43 @@
       (right ? '<div class="actions">' + right + '</div>' : '') + '</header>';
   }
 
-  // ------------------------------------------------------------------------------------------------ Overview (release 1)
+  // ------------------------------------------------------------------------------------------------ dates and numbers
+  var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var MONS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function ymdDate(k) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(k || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+  function todayDate() { var d = new Date(); d.setHours(0, 0, 0, 0); return d; }
+  function ymdOf(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function dayDiff(k) { var d = ymdDate(k); return d ? Math.round((d - todayDate()) / 864e5) : null; }
+  function fmtDay(k) { var d = ymdDate(k); return d ? DAYS[d.getDay()] + ' ' + d.getDate() + ' ' + MONS[d.getMonth()] : ''; }
+  function fmtDate(k) { var d = ymdDate(k); return d ? d.getDate() + ' ' + MONS[d.getMonth()] + (d.getFullYear() !== new Date().getFullYear() ? ' ' + d.getFullYear() : '') : ''; }
+  function relDay(k) {
+    var n = dayDiff(k);
+    if (n == null) return '';
+    if (n === 0) return 'today';
+    if (n === 1) return 'tomorrow';
+    if (n === -1) return 'yesterday';
+    if (n > 1 && n < 7) return 'on ' + DAYS[ymdDate(k).getDay()];
+    return (n > 0 ? 'on ' : 'on ') + fmtDay(k);
+  }
+  function timeLabel(iso) {
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    var day = new Date(d); day.setHours(0, 0, 0, 0);
+    var n = Math.round((todayDate() - day) / 864e5);
+    if (n === 0) return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    if (n < 7) return DAYS[d.getDay()];
+    return d.getDate() + ' ' + MONS[d.getMonth()];
+  }
+  function money(n, whole) {
+    n = Number(n) || 0;
+    var cents = !whole && Math.round(n * 100) % 100 !== 0;
+    return '£' + n.toLocaleString('en-GB', { minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0 });
+  }
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : (many || one + 's')); }
+  function lineVar(line) { return line ? 'var(--l-' + ({ baby: 'baby', crafts: 'crafts', xmas: 'xmas', caravans: 'caravans' }[line] || 'other') + ')' : 'var(--line-2)'; }
+  function lineDot(line, label) { return '<span class="ldot" style="background:' + lineVar(line) + '"' + (label ? ' title="' + esc(label) + '"' : ' aria-hidden="true"') + '></span>'; }
+
+  // ------------------------------------------------------------------------------------------------ Overview
   var STEPS = [
     ['Shell', 'Sign-in, Launchpad, Settings'],
     ['Overview', 'Your live pipeline, read-only'],
@@ -509,29 +556,259 @@
     ['Sectors', 'Lines, show lists, your turn'],
     ['Phone', 'Polish for your phone']
   ];
-  var DONE_STEPS = 1;
+  var DONE_STEPS = 2;
+
+  // Your turn: what each next action means, in the order they're shown. First emails are left for batches (step 3).
+  var TURN = [
+    ['Set up at stand', 'New customer: set them up at their stand.'],
+    ['Set-up call', 'New customer: the set-up call.'],
+    ['Onboarding call', 'Upgraded customer: the onboarding call.'],
+    ['Send thank you', 'Thank-yous for your show chats.'],
+    ['Visit at the show', 'You emailed them before a show you’re going to: drop by their stand.'],
+    ['Find a working email', 'Their email bounced: find another address.'],
+    ['Follow up after the show', 'Due a follow-up. From step 3 these go out as Day 2 batches.'],
+    ['Follow up', 'Due a follow-up. From step 3 these go out as Day 2 batches.'],
+    ['Check earlier row', 'Already in the sheet from another show: check the earlier row.'],
+    ['Ask before emailing', 'Sole trader or no consent yet: ask before emailing.'],
+    ['Find contact details', 'No email address yet.'],
+    ['Check Companies House', 'P3 and P4: confirm the company before emailing. Step 6 brings these checks into HQ.'],
+    ['Post a letter', 'Reach them by post instead.'],
+    ['Leaflet if passing', 'P5: a leaflet if you pass their stand.']
+  ];
+  var STAGES = [['todo', 'Not emailed'], ['emailed', 'Emailed'], ['engaged', 'Engaged'], ['won', 'Customer'], ['post', 'By post'], ['out', 'Out']];
+
+  function fetchOverview(fresh) {
+    if (S.busy.ov) return;
+    S.busy.ov = true;
+    if (fresh) render();
+    call('overview', fresh ? { fresh: true } : {}, { timeout: 90000 }).then(function (j) {
+      S.busy.ov = false; S.ov = j; S.ovErr = ''; S.ovAt = Date.now(); S.offline = false;
+      if (S.route === 'overview') renderRoute();
+    }, function (e) {
+      S.busy.ov = false;
+      S.ovErr = e.kind === 'signin' ? 'Sign in again to see your pipeline.' : e.message === 'Unknown action' ? 'Your HQ script is still release ' + (S.build || 1) + '. Paste the new Code.gs and deploy a new version to see your pipeline.' : e.message;
+      if (e.kind === 'network') S.offline = true;
+      if (S.route === 'overview') renderRoute();
+    });
+    function render() { if (S.route === 'overview') renderRoute(); }
+  }
+
+  function refreshBtn(id, busy, at) {
+    return (at ? '<span class="note updated">Updated ' + esc(timeLabel(new Date(at).toISOString())) + '</span>' : '') +
+      '<button class="btn small" id="' + id + '"' + (busy ? ' disabled' : '') + '>' + (busy ? '<span class="spinner"></span>' : I.refresh) + 'Refresh</button>';
+  }
 
   function pageOverview() {
+    var o = S.ov;
+    var eyebrow = '<span class="pulse' + (S.offline ? ' off' : '') + '"></span>' + esc(nowLine());
+    if (!o) {
+      var body = S.ovErr
+        ? '<section class="panel"><p class="error" style="margin:0" role="alert">' + esc(S.ovErr) + '</p><div class="actions"><button class="btn small" id="ov-retry">' + I.refresh + 'Try again</button></div></section>'
+        : '<section class="panel"><span class="loading"><span class="spinner"></span>Reading your pipeline</span></section>';
+      return head(eyebrow, greeting(), 'Your live pipeline, straight from the sheet.') + body + buildLine();
+    }
+    var sd = o.sending;
+    var upcoming = o.shows.filter(function (s) { return s.status === 'upcoming' || s.status === 'on'; });
+    var lede = '<b class="hl">' + sd.today + '</b> of ' + sd.limit + ' emails out today';
+    var nextShow = upcoming.filter(function (s) { return s.status === 'upcoming'; })[0];
+    var onNow = upcoming.filter(function (s) { return s.status === 'on'; })[0];
+    if (onNow) lede += ', and <b class="hl">' + esc(onNow.short) + '</b> is on now';
+    else if (nextShow) lede += ', and <b class="hl">' + esc(nextShow.short) + '</b> starts ' + esc(relDay(nextShow.start));
+    lede += '.';
+    if (o.customers && o.customers.active) lede += ' ' + plural(o.customers.active, 'customer') + ' paying.';
+    var html = head(eyebrow, greeting(), lede, refreshBtn('ov-refresh', S.busy.ov, S.ovAt));
+    if (S.ovErr) html += '<p class="banner" style="margin:0" role="alert"><span class="grow">' + esc(S.ovErr) + '</span></p>';
+    html += sendingPanel(o) + tilesRow(o);
+    html += '<div class="ov-grid"><div class="ov-main">' + pipelinePanel(o) + emailsAheadPanel(o) + '</div>' +
+      '<div class="ov-side">' + turnPanel(o) + arrivalsPanel(o) + '</div></div>';
+    html += buildLine();
+    return html;
+  }
+
+  function sendingPanel(o) {
+    var sd = o.sending, lim = Math.max(1, sd.limit), cols = lim <= 100 ? 10 : lim <= 150 ? 15 : 20;
+    var dots = '';
+    var n = Math.min(lim, 200);
+    for (var i = 0; i < Math.max(n, Math.min(sd.today, 200)); i++) dots += '<span class="' + (i < sd.today ? (i < lim ? 'on' : 'over') : '') + '"></span>';
+    var spare = Math.max(0, sd.limit - sd.today);
+    var rate = (sd.rate7 * 100).toFixed(1);
+    var lines = [];
+    lines.push('<li><b>' + sd.sent7 + '</b> sent in the last 7 days, <b class="' + (sd.rate7 > 0.02 ? 'bad' : 'good') + '">' + rate + '%</b> bounced' + (sd.optedOut7 ? ', ' + plural(sd.optedOut7, 'opt-out') : '') + '.</li>');
+    if (sd.held) lines.push('<li class="warn">The step up to ' + sd.stepLimit + ' a day is on hold until bounces are under 2% over 7 days.</li>');
+    if (sd.next) lines.push('<li>Goes to <b>' + sd.next.limit + '</b> a day from ' + esc(fmtDay(sd.next.from)) + (sd.rate7 > 0.02 && !sd.held ? ', if bounces are under 2% by then' : '') + '.</li>');
+    if (sd.lastSend) {
+      var ls = new Date(sd.lastSend);
+      lines.push('<li>Last outreach email ' + esc(relDay(ymdOf(ls)) + ' at ' + ('0' + ls.getHours()).slice(-2) + ':' + ('0' + ls.getMinutes()).slice(-2)) + '.</li>');
+    }
+    return '<section class="sendnow" aria-label="Sending today">' +
+      '<div class="send-count"><div class="waffle" style="grid-template-columns:repeat(' + cols + ',minmax(0,1fr));width:' + (cols * 15) + 'px" role="img" aria-label="' + sd.today + ' of ' + sd.limit + ' sent today"> ' + dots + '</div>' +
+      '<div class="send-num"><span class="eyebrow">Sent today</span><span class="big">' + sd.today + '<small>/' + sd.limit + '</small></span>' +
+      '<span class="legend"><span><i class="k on"></i>' + sd.today + ' sent</span><span><i class="k"></i>' + spare + ' spare today</span></span></div></div>' +
+      '<div class="send-facts"><span class="eyebrow">Sending · last 7 days</span><ul>' + lines.join('') + '</ul>' +
+      '<p class="note" style="margin:0">Rows already in the pipeline stay paused until you start them as batches in step 3. Until then, the Showsum menu still sends.</p></div></section>';
+  }
+
+  function spark(values, colour) {
+    var max = Math.max.apply(null, values.concat([1]));
+    var w = 240, h = 40, step = values.length > 1 ? w / (values.length - 1) : w;
+    var pts = values.map(function (v, i) { return [Math.round(i * step), Math.round(h - 4 - (v / max) * (h - 8))]; });
+    var line = pts.map(function (p) { return p.join(','); }).join(' ');
+    var area = '0,' + h + ' ' + line + ' ' + w + ',' + h;
+    var last = pts[pts.length - 1];
+    return '<svg class="spark" viewBox="0 0 240 40" preserveAspectRatio="none" aria-hidden="true"><polygon points="' + area + '" fill="' + colour + '" fill-opacity=".1"/>' +
+      '<polyline points="' + line + '" fill="none" stroke="' + colour + '" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>' +
+      '<circle cx="' + last[0] + '" cy="' + last[1] + '" r="3.5" fill="' + colour + '"/></svg>';
+  }
+
+  function tilesRow(o) {
+    var t = o.tiles;
+    var tile = function (label, value, sub, values, colour, href, subTone) {
+      var tag = href ? 'a' : 'div';
+      return '<' + tag + ' class="kpi"' + (href ? ' href="' + href + '"' : '') + '><span class="kpi-top"><span>' + label + '</span><span>7D</span></span>' +
+        '<span class="kpi-val">' + value + '</span><span class="kpi-sub' + (subTone ? ' ' + subTone : '') + '">' + sub + '</span>' + spark(values, colour) + '</' + tag + '>';
+    };
+    return '<section class="kpis" aria-label="The last 7 days">' +
+      tile('Emails sent', t.emails.total, 'Outreach, not customer emails', t.emails.values, '#7ee0a1') +
+      tile('Visits', t.visits.total, t.visits.fromEmail + ' from your email links', t.visits.values, '#8fc7ff') +
+      tile('Bounces', t.bounces.total, (t.bounces.sent ? (t.bounces.rate * 100).toFixed(1) + '% of ' + t.bounces.sent + ' sent' : 'Nothing sent'), t.bounces.values, '#ff7a66', '', t.bounces.rate > 0.02 ? 'bad' : '') +
+      tile('Sales', t.sales.total, t.sales.total ? money(t.sales.money) + ' taken' : (o.customers && o.customers.active ? plural(o.customers.active, 'customer') + ' paying' : 'None yet'), t.sales.values, '#ffd23f', '#/customers') +
+      '</section>';
+  }
+
+  function stageBar(s) {
+    var total = s.prospects || 1;
+    var segs = STAGES.map(function (st) {
+      var n = s.stages[st[0]] || 0;
+      return n ? '<span class="seg ' + st[0] + '" style="width:' + (n / total * 100).toFixed(2) + '%" title="' + esc(st[1] + ': ' + n) + '"></span>' : '';
+    }).join('');
+    var legend = STAGES.filter(function (st) { return s.stages[st[0]]; }).map(function (st) {
+      return '<span><i class="k ' + st[0] + '"></i>' + esc(st[1]) + ' ' + s.stages[st[0]] + '</span>';
+    }).join('');
+    return '<div class="stagebar" role="img" aria-label="' + esc(STAGES.filter(function (st) { return s.stages[st[0]]; }).map(function (st) { return st[1] + ' ' + s.stages[st[0]]; }).join(', ')) + '">' + segs + '</div><div class="legend small">' + legend + '</div>';
+  }
+
+  function stepLine(st) {
+    var due = '';
+    if (st.key === 'first') {
+      if (st.window === 'open') due = 'window open until ' + fmtDay(st.closes);
+      else if (st.window === 'soon') due = 'window opens ' + fmtDay(st.opens);
+      else if (st.window === 'closed') due = 'window closed ' + fmtDay(st.closes);
+      return '<li class="' + (st.ready && st.window === 'open' ? 'go' : '') + '"><b>First email</b> · ' + st.ready + ' ready' + (st.sent ? ', ' + st.sent + ' sent' : '') + (due ? ' · ' + esc(due) : '') + '</li>';
+    }
+    if (st.key === 'day2') return '<li class="go"><b>Day 2 numbers</b> · ' + st.ready + ' ready, due from ' + esc(fmtDay(st.due)) + '</li>';
+    if (st.key === 'last') return '<li' + (st.ready ? ' class="go"' : '') + '><b>Last touch</b> · ' + (st.ready ? st.ready + ' ready' : '') + (st.ready && st.waiting ? ', ' : '') + (st.waiting ? st.waiting + ' waiting, from ' + esc(fmtDay(st.due)) : '') + '</li>';
+    if (st.key === 'season') return '<li><b>Season planning</b> · ' + st.ready + ' not emailed before the show, for the 2nd week of January</li>';
+    return '';
+  }
+
+  function showChip(s) {
+    if (s.status === 'on') return '<span class="chip live">On now</span>';
+    if (s.status === 'upcoming') { var n = dayDiff(s.start); return '<span class="chip">' + (n === 1 ? 'Tomorrow' : 'In ' + n + ' days') + '</span>'; }
+    if (s.status === 'ended') return '<span class="chip dim">Finished ' + esc(fmtDate(s.end)) + '</span>';
+    return '<span class="chip dim">No dates</span>';
+  }
+
+  function pipelinePanel(o) {
+    var t = o.totals;
+    var rows = o.shows.map(function (s) {
+      var dates = s.start ? (s.start === s.end ? fmtDay(s.start) : fmtDay(s.start) + ' – ' + fmtDay(s.end)) : '';
+      return '<article class="show-row" style="--lc:' + lineVar(s.line) + '">' +
+        '<div class="show-head"><div class="show-name"><b>' + esc(s.short || s.name) + '</b><span class="sub small">' + esc([s.name !== s.short ? s.name : '', dates, s.sector].filter(Boolean).join(' · ')) + '</span></div>' +
+        showChip(s) + '</div>' + stageBar(s) +
+        (s.steps.length ? '<ul class="steps">' + s.steps.map(stepLine).join('') + '</ul>' : '<p class="note" style="margin:0">Nothing due by email.</p>') +
+        '<span class="show-count mono">' + plural(s.prospects, 'prospect') + '</span></article>';
+    }).join('');
+    return '<section class="panel" aria-labelledby="pl-h"><div class="panel-head"><div><span class="eyebrow">Pipeline · read-only</span><h2 class="h2" id="pl-h">Your shows</h2>' +
+      '<span class="sub small">' + plural(t.prospects, 'prospect') + ': ' + t.emailed + ' emailed, ' + t.notEmailed + ' you can email and haven’t yet, ' + (t.hot + t.warm) + ' hot or warm, ' + t.bounced + ' bounced. Paused until you start batches in step 3.</span></div>' +
+      (o.sheetUrl ? '<a class="btn small" href="' + esc(o.sheetUrl) + '" target="_blank" rel="noopener noreferrer">Open the sheet' + I.out + '</a>' : '') + '</div>' +
+      (rows || '<p class="note" style="margin:0">No prospects in the pipeline yet.</p>') + '</section>';
+  }
+
+  function emailsAheadPanel(o) {
+    // Emails, last 14 days
+    var max = Math.max.apply(null, o.emails.map(function (d) { return d.first + d.day2 + d.last + d.other; }).concat([1]));
+    var total = o.emails.reduce(function (m, d) { return m + d.first + d.day2 + d.last + d.other; }, 0);
+    var bars = o.emails.map(function (d) {
+      var dt = ymdDate(d.d), sum = d.first + d.day2 + d.last + d.other;
+      var seg = function (n, cls) { return n ? '<span class="' + cls + '" style="height:' + (n / max * 100).toFixed(1) + '%"></span>' : ''; };
+      return '<div class="bar' + (d.d === o.today ? ' today' : '') + '" title="' + esc(fmtDay(d.d) + ': ' + sum + ' sent') + '"><div class="stack">' + seg(d.other, 'other') + seg(d.last, 'last') + seg(d.day2, 'day2') + seg(d.first, 'first') + '</div>' +
+        '<span class="lab">' + (dt.getDay() === 1 || d.d === o.today ? esc(String(dt.getDate())) : DAYS[dt.getDay()].charAt(0)) + '</span></div>';
+    }).join('');
+    var emails = '<div class="em"><div class="panel-head"><div><span class="eyebrow">Emails · last 14 days</span><h2 class="h3">' + plural(total, 'email') + ' sent</h2></div></div>' +
+      '<div class="bars" role="img" aria-label="Emails sent each day for the last 14 days">' + bars + '</div>' +
+      '<div class="legend small"><span><i class="k first"></i>First emails</span><span><i class="k day2"></i>Day 2</span><span><i class="k last"></i>Last touch</span><span><i class="k other"></i>Other</span></div></div>';
+
+    // Shows ahead, next 3 weeks
+    var span = 21, t0 = todayDate();
+    var pos = function (k) { var d = ymdDate(k); return Math.max(0, Math.min(span, Math.round((d - t0) / 864e5))); };
+    var pct = function (x) { return (x / span * 100).toFixed(2) + '%'; };
+    var lanes = o.ahead.map(function (a) {
+      var s = pos(a.start), e = pos(a.end) + 1;
+      var ws = pos(a.opens), we = pos(a.firstBy) + 1;
+      var window = dayDiff(a.firstBy) >= 0 ? '<span class="win" style="left:' + pct(ws) + ';width:' + pct(Math.max(0, we - ws)) + '"></span>' : '';
+      var meta = a.prospects != null ? plural(a.prospects, 'prospect') : a.exhibitors ? plural(a.exhibitors, 'exhibitor') + ' · not in the pipeline yet' : 'not in the pipeline yet';
+      return '<div class="lane"><span class="lane-lab">' + lineDot(a.line, a.sector) + '<b>' + esc(a.name) + '</b><span class="muted"> · ' + esc(fmtDate(a.start)) + (a.end !== a.start ? '–' + esc(fmtDate(a.end)) : '') + ' · ' + esc(meta) + '</span></span>' +
+        '<span class="lane-track">' + window + '<span class="show" style="left:' + pct(s) + ';width:' + pct(Math.max(1, e - s)) + ';background:' + lineVar(a.line) + '"></span></span></div>';
+    }).join('');
+    var ticks = [0, 7, 14].map(function (d) {
+      var dt = new Date(t0); dt.setDate(dt.getDate() + d);
+      return '<span style="left:' + pct(d) + '">' + (d === 0 ? 'TODAY' : DAYS[dt.getDay()].toUpperCase() + ' ' + dt.getDate()) + '</span>';
+    }).join('');
+    var ahead = '<div class="ahead"><div class="panel-head"><div><span class="eyebrow">Next 3 weeks</span><h2 class="h3">Shows ahead</h2></div>' +
+      (o.aheadMore ? '<span class="note">' + plural(o.aheadMore, 'more show') + ' after that</span>' : '') + '</div>' +
+      (lanes ? '<div class="timeline"><div class="ticks" aria-hidden="true">' + ticks + '</div>' + lanes + '</div>' +
+        '<div class="legend small"><span><i class="k show"></i>Show days, in sector colour</span><span><i class="k win"></i>First-email window (14 to 4 days before)</span></div>'
+        : '<p class="note" style="margin:0">No shows in the next 3 weeks.</p>') +
+      (o.aheadNote ? '<p class="note" style="margin:0">' + esc(o.aheadNote) + '</p>' : '') + '</div>';
+    return '<section class="panel split" aria-label="Emails and shows ahead">' + emails + ahead + '</section>';
+  }
+
+  function turnPanel(o) {
+    var order = {};
+    TURN.forEach(function (t, i) { order[t[0]] = i; });
+    var items = o.yourTurn.slice().sort(function (a, b) { return (order[a.action] == null ? 99 : order[a.action]) - (order[b.action] == null ? 99 : order[b.action]); });
+    var hint = function (a) { var t = TURN.filter(function (x) { return x[0] === a; })[0]; return t ? t[1] : ''; };
+    var cards = (o.setup || []).map(function (c) {
+      return '<article class="ticket"><span class="t-top"><span class="round">' + c.done + '/' + c.of + '</span><span class="t-tag">NEW CUSTOMER · ' + esc(c.plan.toUpperCase()) + '</span></span>' +
+        '<b class="t-title">Finish setting up ' + esc(c.name) + '</b><span class="t-sub">Still to do: ' + esc(c.todo.join(', ')) + '.</span></article>';
+    }).concat(items.map(function (t) {
+      var where = t.shows.map(function (s) { return s.name + (t.shows.length > 1 ? ' ' + s.count : ''); }).join(' · ');
+      var late = dayDiff(t.oldest) < 0 ? ' Due since ' + fmtDay(t.oldest) + '.' : ' Due today.';
+      return '<article class="ticket"><span class="t-top"><span class="round">' + t.count + '</span><span class="t-tag">' + esc(where.toUpperCase()) + '</span></span>' +
+        '<b class="t-title">' + esc(t.action) + '</b><span class="t-sub">' + esc(hint(t.action) + late) + '</span></article>';
+    })).join('');
+    var count = (o.setup || []).length + items.length;
+    return '<section class="turn" aria-labelledby="turn-h"><div class="turn-head"><h2 id="turn-h">Your turn</h2>' + (count ? '<span class="count">' + count + '</span>' : '') + '</div>' +
+      '<p class="sub small" style="margin:0">Next actions due by today in your sheet, grouped. Yellow means it’s waiting on you.</p>' +
+      (cards || '<p class="note" style="margin:0">Nothing waiting on you today.</p>') +
+      (o.sheetUrl && count ? '<a class="btn small" href="' + esc(o.sheetUrl) + '" target="_blank" rel="noopener noreferrer">Open the Prospects tab' + I.out + '</a>' : '') + '</section>';
+  }
+
+  function arrivalsPanel(o) {
+    var rows = o.arrivals.map(function (f) {
+      return '<div class="arr"><span class="mono muted">' + esc(timeLabel(f.t)) + '</span><span class="ftag ' + esc(f.tone) + '">' + esc(f.type) + '</span>' +
+        '<span class="arr-tx"><b>' + esc(f.who) + '</b>' + (f.sub ? '<span>' + esc(f.sub) + '</span>' : '') + '</span></div>';
+    }).join('');
+    return '<section class="panel" aria-labelledby="arr-h"><div class="panel-head"><div><span class="live"><h2 class="h2" id="arr-h">Arrivals</h2><span class="pulse' + (S.offline ? ' off' : '') + '"></span></span>' +
+      '<span class="sub small">Replies, bounces, visits and sales from the last 7 days.</span></div></div>' +
+      (rows ? '<div class="arrs">' + rows + '</div>' : '<p class="note" style="margin:0">Nothing in the last 7 days.</p>') +
+      '<p class="note" style="margin:0">Real replies you read in Gmail. Step 4 brings them into an inbox here.</p></section>';
+  }
+
+  function buildLine() {
     var stops = STEPS.map(function (s, i) {
       var cls = i < DONE_STEPS ? 'done' : i === DONE_STEPS ? 'now' : 'todo';
       return '<div class="stop ' + cls + '" title="' + esc(s[1]) + '"><span class="st"></span><small>STEP ' + (i + 1) + '</small><span class="t">' + esc(s[0]) + '</span></div>';
     }).join('');
-    return head('<span class="pulse' + (S.offline ? ' off' : '') + '"></span>' + esc(nowLine()), greeting(),
-        'HQ is connected and locked to your Google account. Your pipeline carries on exactly as before.') +
-      '<section class="panel" aria-labelledby="ov-line"><div class="panel-head"><div><span class="eyebrow">Build</span><h2 class="h2" id="ov-line">The HQ line</h2>' +
-      '<span class="sub small">Each stop is one release. Green is done; yellow is next.</span></div></div>' +
-      '<div class="line-track" role="list">' + stops + '</div></section>' +
-      '<div class="grid-2">' +
-      '<section class="panel"><span class="tag mint">WORKING NOW</span><h3 class="h3">What HQ does today</h3><div class="soon"><ul>' +
-      '<li>Opens only for your Google account, checked by your own HQ script on every request.</li>' +
-      '<li><a href="#/launchpad">Launchpad</a>: every sheet, app, dashboard and chat you use, one tap away. Edit it to add your own.</li>' +
-      '<li><a href="#/settings">Settings</a>: what’s connected, what’s still to fill in, and a link to open HQ on your phone.</li></ul></div></section>' +
-      '<section class="panel"><span class="tag">NEXT STOP · STEP 2</span><h3 class="h3">Your live pipeline</h3><div class="soon"><ul>' +
-      '<li>Today’s sending against your daily limit, bounces and opt-outs.</li>' +
-      '<li>Every show already in the pipeline, with its prospects by stage and what each one is due next.</li>' +
-      '<li>Arrivals: replies, visits and sales. Customers once the first real sale lands.</li>' +
-      '<li>Read-only. Rows already in the pipeline stay paused until you start them as batches in step 3.</li></ul></div></section>' +
-      '</div>';
+    return '<section class="panel" aria-labelledby="ov-line"><div class="panel-head"><div><span class="eyebrow">Build</span><h2 class="h3" id="ov-line">The HQ line</h2>' +
+      '<span class="sub small">Each stop is one release. Next: start batches from your prospects.</span></div></div>' +
+      '<div class="line-track" role="list">' + stops + '</div></section>';
+  }
+
+  function bindOverview() {
+    var r = $('#ov-refresh'); if (r) r.onclick = function () { fetchOverview(true); };
+    var t = $('#ov-retry'); if (t) t.onclick = function () { S.ovErr = ''; renderRoute(); fetchOverview(true); };
+    if (!S.ov && !S.ovErr && !S.busy.ov && S.token) fetchOverview(false);
   }
 
   function pageSoon(which) {
@@ -543,15 +820,159 @@
       inbox: ['Inbox', 4, 'Every reply and bounce', [
         'Each reply with its first line, and a guess: real or automatic.',
         'Confirm with one tap. A real reply moves the prospect to Engaged.',
-        'Bounces with the reason, and the address marked so it’s never emailed again.']],
-      customers: ['Customers', 2, 'Who’s paying, and on which plan', [
-        'Event Pass, Monthly, Annual and Own-it, with money taken and monthly recurring income.',
-        'Passes ending and renewals coming up.',
-        'Stays empty until the first real sale; test rows are left out.']]
+        'Bounces with the reason, and the address marked so it’s never emailed again.']]
     }[which];
     return head('ARRIVES IN STEP ' + p[1], p[0], esc(p[2]) + '.') +
       '<section class="panel"><span class="tag">STEP ' + p[1] + '</span><div class="soon"><ul>' +
       p[3].map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div></section>';
+  }
+
+  // ------------------------------------------------------------------------------------------------ Customers
+  var PLAN_LINE = { 'Event Pass': '#ffd23f', Monthly: '#7ee0a1', Annual: '#8fc7ff', 'Own-it': '#b49bff' };
+
+  function fetchCustomers() {
+    if (S.busy.cu) return;
+    S.busy.cu = true;
+    if (S.route === 'customers') renderRoute();
+    call('customers', {}, { timeout: 90000 }).then(function (j) {
+      S.busy.cu = false; S.cu = j.customers; S.cuErr = ''; S.cuAt = Date.now();
+      if (S.route === 'customers') renderRoute();
+    }, function (e) {
+      S.busy.cu = false;
+      S.cuErr = e.kind === 'signin' ? 'Sign in again to see your customers.' : e.message === 'Unknown action' ? 'Your HQ script is still release ' + (S.build || 1) + '. Paste the new Code.gs and deploy a new version to see your customers.' : e.message;
+      if (S.route === 'customers') renderRoute();
+    });
+  }
+
+  function pageCustomers() {
+    var c = S.cu;
+    var eyebrow = 'CUSTOMERS · ' + esc(nowLine().split(' · ')[0]);
+    if (!c) {
+      return head(eyebrow, 'Customers', 'Who’s paying, and on which plan.') +
+        (S.cuErr ? '<section class="panel"><p class="error" style="margin:0" role="alert">' + esc(S.cuErr) + '</p><div class="actions"><button class="btn small" id="cu-retry">' + I.refresh + 'Try again</button></div></section>'
+          : '<section class="panel"><span class="loading"><span class="spinner"></span>Reading Sales, Onboarding and the Showsum database</span></section>');
+    }
+    var soon = c.coming.filter(function (x) { return dayDiff(x.date) <= 7 && /ends|closes/.test(x.label); }).length;
+    var title = c.active ? plural(c.active, 'paying customer') : 'No paying customers yet';
+    var lede = c.active
+      ? '<b class="hl">' + money(c.mrr) + '</b> a month coming in on subscriptions, ' + money(c.taken) + ' taken so far' + (soon ? ', and ' + plural(soon, 'pass or plan', 'passes or plans') + ' ending this week' : '') + '.'
+      : (c.total ? 'Everyone who has paid has now ended. ' : '') + 'Sales from your website land here with their plan. Your own account and example addresses are left out; mark any other tests below.';
+    var html = head(eyebrow, title, lede, refreshBtn('cu-refresh', S.busy.cu, S.cuAt));
+    if (c.note) html += '<p class="banner" style="margin:0"><span class="grow">' + esc(c.note) + '</span></p>';
+
+    var subs = c.plans.filter(function (p) { return p.plan === 'Monthly' || p.plan === 'Annual'; }).reduce(function (m, p) { return m + p.active; }, 0);
+    var monthly = c.plans.filter(function (p) { return p.plan === 'Monthly'; })[0] || { active: 0 };
+    var annual = c.plans.filter(function (p) { return p.plan === 'Annual'; })[0] || { active: 0 };
+    html += '<section class="kpis" aria-label="Money and plans">' +
+      kpiPlain('Monthly recurring', money(c.mrr), (monthly.active ? monthly.active + ' monthly' : 'No monthly') + (annual.active ? ', ' + annual.active + ' annual counted monthly' : '') + '. Passes and Own-it are one-off.') +
+      kpiPlain('Taken so far', money(c.taken), c.refunds ? 'Before ' + plural(c.refunds, 'refund') : 'Everything paid, all plans') +
+      kpiPlain('On a pass', String(c.passes.onPass), plural(c.passes.sold, 'pass', 'passes') + ' sold') +
+      kpiPlain('Subscribers', String(subs), c.passes.upgraded ? plural(c.passes.upgraded, 'came', 'came') + ' from a pass' : 'Monthly and Annual') +
+      '</section>';
+
+    // Plans and passes
+    var maxMoney = Math.max.apply(null, c.plans.map(function (p) { return p.money; }).concat([1]));
+    var plans = c.plans.map(function (p) {
+      return '<div class="plan-row"><span class="pdot" style="background:' + PLAN_LINE[p.plan] + '"></span><span class="pname"><b>' + esc(p.plan) + '</b><span class="muted small">' + money(p.price) + (p.plan === 'Monthly' ? ' a month' : p.plan === 'Annual' ? ' a year' : ' once') + '</span></span>' +
+        '<span class="pcount"><b>' + p.active + '</b><span class="muted small"> active · ' + p.total + ' in all</span></span>' +
+        '<span class="pmoney"><span class="pbar"><span style="width:' + (p.money / maxMoney * 100).toFixed(1) + '%;background:' + PLAN_LINE[p.plan] + '"></span></span><b>' + money(p.money) + '</b></span></div>';
+    }).join('');
+    var ps = c.passes;
+    var journey = ps.sold
+      ? '<div class="journey">' +
+        jstep(ps.onPass, 'still on a pass') + jstep(ps.toMonthly, 'moved to Monthly') + jstep(ps.toAnnual, 'moved to Annual') + jstep(ps.toOwn, 'moved to Own-it') + jstep(ps.ended, 'ended, no upgrade') + '</div>' +
+        '<p class="sub" style="margin:0"><b class="hl">' + Math.round(ps.rate * 100) + '%</b> of pass customers became subscribers, ' + ps.upgraded + ' of ' + ps.people + '. ' +
+        plural(ps.reminders, 'upgrade reminder') + ' sent' + (ps.afterReminder ? ', ' + ps.afterReminder + ' upgraded after one' : '') + '.</p>'
+      : '<p class="note" style="margin:0">No passes sold yet. When there are, this shows how many go on to a plan.</p>';
+    html += '<div class="grid-2"><section class="panel"><div class="panel-head"><div><span class="eyebrow">Who pays · what pays</span><h2 class="h3">Plans</h2></div></div><div class="plans">' + plans + '</div></section>' +
+      '<section class="panel"><div class="panel-head"><div><span class="eyebrow">Event Pass journeys</span><h2 class="h3">Pass to subscription</h2></div></div>' + journey + '</section></div>';
+
+    // The list
+    var filters = [['all', 'All', c.list.length], ['active', 'Active', c.list.filter(function (x) { return x.active; }).length],
+      ['pass', 'Passes', c.list.filter(function (x) { return x.plan === 'Event Pass'; }).length],
+      ['subs', 'Subscriptions', c.list.filter(function (x) { return x.plan === 'Monthly' || x.plan === 'Annual'; }).length],
+      ['ended', 'Ended', c.list.filter(function (x) { return !x.active; }).length]];
+    var f = S.cuFilter, q = S.cuFind.trim().toLowerCase();
+    var shown = c.list.filter(function (x) {
+      if (f === 'active' && !x.active) return false;
+      if (f === 'pass' && x.plan !== 'Event Pass') return false;
+      if (f === 'subs' && x.plan !== 'Monthly' && x.plan !== 'Annual') return false;
+      if (f === 'ended' && x.active) return false;
+      return !q || (x.name + ' ' + x.contact + ' ' + x.show + ' ' + x.sector).toLowerCase().indexOf(q) >= 0;
+    });
+    var rows = shown.map(function (x) {
+      return '<div class="cust" role="row">' +
+        '<span class="c-name" role="cell">' + lineDot(x.line, x.sector) + '<span><b>' + esc(x.name) + '</b><span class="muted small">' + esc([x.contact, x.show].filter(Boolean).join(' · ')) + '</span></span></span>' +
+        '<span class="c-plan" role="cell"><span class="pdot" style="background:' + PLAN_LINE[x.plan] + '"></span>' + esc(x.plan) + (x.upgraded ? '<span class="muted small"> from a pass</span>' : '') + '</span>' +
+        '<span class="c-since mono small" role="cell">' + esc(fmtDate(x.since)) + '</span>' +
+        '<span class="c-paid" role="cell">' + money(x.paid) + '</span>' +
+        '<span class="c-next small" role="cell">' + (x.next ? esc(x.next.label) + '<span class="muted"> ' + esc(fmtDay(x.next.date)) + '</span>' : '<span class="muted">—</span>') + '</span>' +
+        '<span class="c-status" role="cell"><span class="chip ' + (x.tone === 'ok' ? 'live' : x.tone === 'warn' ? 'warn' : 'dim') + '">' + esc(x.status) + '</span>' +
+        (x.setup ? '<span class="muted small">Set-up ' + x.setup.done + '/' + x.setup.of + '</span>' : '') + '</span>' +
+        '<span class="c-act" role="cell"><button class="btn small ghost" data-test="' + esc(x.id) + '" title="Leave this one out: a test, or yourself">Not a customer</button></span></div>';
+    }).join('');
+    html += '<section class="panel" aria-labelledby="cl-h"><div class="panel-head"><div><span class="eyebrow">Passenger list</span><h2 class="h2" id="cl-h">Customers</h2></div>' +
+      '<input class="input find" id="cu-find" type="search" placeholder="Find a customer" aria-label="Find a customer" value="' + esc(S.cuFind) + '"></div>' +
+      '<div class="chips" role="tablist">' + filters.map(function (x) { return '<button class="fchip" role="tab" data-f="' + x[0] + '" aria-selected="' + (f === x[0]) + '">' + x[1] + ' <span class="muted">' + x[2] + '</span></button>'; }).join('') + '</div>' +
+      (c.list.length ? '<div class="cust-table" role="table"><div class="cust head" role="row"><span role="columnheader">Customer</span><span role="columnheader">Plan</span><span role="columnheader">Since</span><span role="columnheader">Paid</span><span role="columnheader">Next</span><span role="columnheader">Status</span><span></span></div>' +
+        (rows || '<p class="note" style="margin:8px 0 0">No customers match.</p>') + '</div>'
+        : '<p class="note" style="margin:0">No customers yet. The first sale from the website appears here.</p>') + '</section>';
+
+    // Coming up and money by month
+    var coming = c.coming.map(function (x) {
+      return '<div class="arr"><span class="mono muted">' + esc(fmtDate(x.date)) + '</span><span class="ftag ' + (x.auto ? 'muted' : 'yellow') + '">' + (x.auto ? 'AUTOMATIC' : 'YOU') + '</span>' +
+        '<span class="arr-tx"><b>' + esc(x.name) + '</b><span>' + esc(x.label + ' · ' + x.plan) + '</span></span></div>';
+    }).join('');
+    var maxM = Math.max.apply(null, c.months.map(function (m) { return m.paid; }).concat([1]));
+    var months = c.months.map(function (m) {
+      var mm = Number(m.m.slice(5)) - 1;
+      return '<div class="bar" title="' + esc(MONS[mm] + ': ' + money(m.paid)) + '"><span class="val small">' + (m.paid ? money(m.paid, true) : '') + '</span><div class="stack"><span class="first" style="height:' + (m.paid / maxM * 100).toFixed(1) + '%"></span></div><span class="lab">' + MONS[mm].toUpperCase() + '</span></div>';
+    }).join('');
+    html += '<div class="grid-2"><section class="panel"><div class="panel-head"><div><span class="eyebrow">Renewals and passes ending</span><h2 class="h3">Coming up, next 30 days</h2></div></div>' +
+      (coming ? '<div class="arrs">' + coming + '</div>' : '<p class="note" style="margin:0">Nothing in the next 30 days.</p>') + '</section>' +
+      '<section class="panel"><div class="panel-head"><div><span class="eyebrow">Taken</span><h2 class="h3">Money by month</h2></div></div><div class="bars months" role="img" aria-label="Money taken each month">' + months + '</div></section></div>';
+
+    // Left out
+    if (c.hidden.length) {
+      html += '<section class="panel"><div class="panel-head"><div><span class="eyebrow">Left out</span><h2 class="h3">Not counted as customers</h2>' +
+        '<span class="sub small">Tests and your own accounts. They stay in your sheets; HQ just doesn’t count them.</span></div></div><div class="rows">' +
+        c.hidden.map(function (h) {
+          return row('no', esc(h.name), esc(h.plan + ' · ' + h.why), h.fixed ? '' : '<button class="btn small" data-back="' + esc(h.id) + '">Put back</button>');
+        }).join('') + '</div></section>';
+    }
+    return html;
+  }
+
+  function kpiPlain(label, value, sub) {
+    return '<div class="kpi"><span class="kpi-top"><span>' + esc(label) + '</span></span><span class="kpi-val">' + esc(value) + '</span><span class="kpi-sub">' + esc(sub) + '</span></div>';
+  }
+  function jstep(n, label) { return '<div class="jstep"><b>' + n + '</b><span class="muted small">' + esc(label) + '</span></div>'; }
+
+  function bindCustomers() {
+    var r = $('#cu-refresh'); if (r) r.onclick = function () { fetchCustomers(); };
+    var t = $('#cu-retry'); if (t) t.onclick = function () { S.cuErr = ''; fetchCustomers(); };
+    var find = $('#cu-find');
+    if (find) find.oninput = function () {
+      S.cuFind = find.value; var pos = find.selectionStart;
+      renderRoute();
+      var again = $('#cu-find'); if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (e) { /* ignore */ } }
+    };
+    var main = $('#main');
+    main.onclick = function (ev) {
+      var chip = ev.target.closest('[data-f]');
+      if (chip) { S.cuFilter = chip.dataset.f; renderRoute(); return; }
+      var b = ev.target.closest('[data-test],[data-back]');
+      if (!b) return;
+      var test = !!b.dataset.test, id = b.dataset.test || b.dataset.back;
+      var who = test ? (S.cu.list.filter(function (x) { return x.id === id; })[0] || {}).name : '';
+      if (test && !window.confirm('Leave ' + (who || 'this customer') + ' out of your customers? Use this for tests and your own accounts. Nothing in your sheets changes, and you can put them back.')) return;
+      b.disabled = true;
+      call('markCustomer', { id: id, test: test }).then(function (j) {
+        S.cu = j.customers; S.cuAt = Date.now(); S.ov = null;
+        renderRoute(); toast(test ? 'Left out of your customers' : 'Put back');
+      }, function (e) { b.disabled = false; toast(e.message, true); });
+    };
+    if (!S.cu && !S.cuErr && !S.busy.cu && S.token) fetchCustomers();
   }
 
   // ------------------------------------------------------------------------------------------------ Launchpad
@@ -707,6 +1128,10 @@
       '<div style="display:flex;align-items:center;gap:14px">' +
       (u.picture ? '<span class="avatar" style="width:48px;height:48px"><img src="' + esc(u.picture) + '" alt="" referrerpolicy="no-referrer"></span>' : '<span class="avatar" style="width:48px;height:48px">' + esc(firstInitial()) + '</span>') +
       '<span style="display:flex;flex-direction:column;min-width:0"><b>' + esc(u.name || 'You') + '</b><span class="sub small" style="overflow-wrap:anywhere">' + esc(u.email || (S.claims && S.claims.email) || '') + '</span></span></div>' +
+      '<form class="name-form" id="st-name-form" novalidate><div class="field"><label for="st-name">What HQ calls you</label>' +
+      '<span class="name-row"><input class="input" id="st-name" maxlength="24" autocomplete="off" placeholder="' + esc(firstInitial()) + '" value="' + esc(S.hqName) + '">' +
+      '<button class="btn small" type="submit" id="st-name-save">Save</button></span>' +
+      '<span class="hint">For the greeting on the Overview. Leave it empty to use your Google initial.</span></div></form>' +
       '<p class="note" style="margin:0">Your sign-in renews by itself while HQ is open. Every request is checked by your HQ script.</p>' +
       '<div class="actions"><button class="btn" id="st-signout">' + I.signout + 'Sign out</button></div></section>';
 
@@ -800,6 +1225,16 @@
       e.userChoice.then(function () { S.installEvt = null; renderRoute(); });
     });
     on('#st-reload', function () { location.reload(); });
+    var nf = $('#st-name-form');
+    if (nf) nf.onsubmit = function (ev) {
+      ev.preventDefault();
+      var btn = $('#st-name-save'), val = $('#st-name').value.trim();
+      btn.disabled = true;
+      call('saveName', { name: val }).then(function (j) {
+        S.hqName = j.hqName || ''; store(LS.name, S.hqName);
+        btn.disabled = false; renderShell(); toast(S.hqName ? 'HQ will call you ' + S.hqName : 'HQ will use your Google initial');
+      }, function (e) { btn.disabled = false; toast(e.kind === 'signin' ? 'Sign in again, then save.' : e.message, true); });
+    };
     if (!S.status && !S.statusErr && !S.busy.status) fetchStatus();
   }
 
