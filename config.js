@@ -8,6 +8,6 @@
  *            printf %s 'https://script.google.com/macros/s/…/exec' | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | cut -c1-22
  */
 window.HQ_SETUP = {
-  clientId: '',
-  scriptPin: ''
+  clientId: '547454018965-lqfdvfj6fpc8plasfvv5lt06u6m8pb2u.apps.googleusercontent.com',
+  scriptPin: '7wY-1eqpbMRzt3EuSOi1xN'
 };
