@@ -464,3 +464,26 @@ dialog .foot { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wr
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ---------- Release 4: Inbox ---------- */
+a.ticket { text-decoration: none; transition: transform .15s; }
+a.ticket:hover { transform: translateY(-1px); }
+.warn-list { margin: 6px 0 0; padding-left: 18px; color: var(--sub); }
+.warn-list li { margin: 2px 0; }
+.msgs { display: flex; flex-direction: column; gap: 10px; }
+.msg { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: 16px; background: var(--panel-2); border: 1px solid var(--line-soft); border-left: 4px solid var(--yellow); }
+.msg-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.msg-who { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.msg-who b { font-stretch: 112%; font-size: 16px; font-weight: 800; overflow-wrap: anywhere; }
+.msg-subj { font-weight: 600; overflow-wrap: anywhere; }
+.msg-first { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--ground); color: var(--sub); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.msg-acts { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 2px; }
+.arr-acts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; font-size: 12.5px; }
+.linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--yellow); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.linkish[disabled] { opacity: .45; cursor: default; }
+.steps-n { margin: 0; padding-left: 22px; color: var(--sub); display: flex; flex-direction: column; gap: 8px; }
+.steps-n b { color: var(--text); }
+@media (max-width: 760px) {
+  .msg { padding: 14px; }
+  .msg-acts .btn { flex: 1 1 auto; }
+}

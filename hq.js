@@ -1,9 +1,9 @@
-/* Showsum HQ · app (release 3: batches; live Overview and Customers; shell, sign-in, Launchpad, Settings) */
+/* Showsum HQ · app (release 4: Inbox; batches; live Overview and Customers; shell, sign-in, Launchpad, Settings) */
 (function () {
   'use strict';
 
-  var APP_VERSION = 3;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
-  var EXPECT_BUILD = 3;      // the HQ Apps Script release this app expects
+  var APP_VERSION = 4;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
+  var EXPECT_BUILD = 4;      // the HQ Apps Script release this app expects
   var LS = { config: 'hq.config', links: 'hq.links', user: 'hq.user', name: 'hq.name' };
   var SS_TOKEN = 'hq.idToken';
   var GSI_SRC = 'https://accounts.google.com/gsi/client';
@@ -19,7 +19,7 @@
     config: null, token: null, claims: null, user: null, links: null, props: null, status: null, statusErr: '',
     build: null, route: 'overview', editing: false, draft: null, offline: false, refused: false, pin: '',
     gsi: null, waiters: [], installEvt: null, banner: '', busy: {},
-    hqName: '', ov: null, ovErr: '', cu: null, cuErr: '', cuFilter: 'all', cuFind: ''
+    hqName: '', ov: null, ovErr: '', cu: null, cuErr: '', cuFilter: 'all', cuFind: '', ib: null, ibErr: '', gen: 0, ibSeq: 0
   };
 
   // ------------------------------------------------------------------------------------------------ icons
@@ -192,7 +192,7 @@
   function signOut() {
     var done = function () {
       try { if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
-      S.token = null; S.claims = null; S.user = null; S.links = null; S.status = null; S.ov = null; S.cu = null;
+      S.token = null; S.claims = null; S.user = null; S.links = null; S.status = null; S.ov = null; S.cu = null; S.ib = null; S.gen++;
       sset(SS_TOKEN, null);
       store(LS.user, null); store(LS.links, null);
       renderSignin();
@@ -277,7 +277,7 @@
     [LS.config, LS.links, LS.user, LS.name].forEach(function (k) { store(k, null); });
     sset(SS_TOKEN, null);
     S.config = null; S.token = null; S.user = null; S.links = null; S.status = null; S.gsi = null; S.pin = '';
-    S.ov = null; S.cu = null; S.hqName = '';
+    S.ov = null; S.cu = null; S.ib = null; S.hqName = ''; S.gen++;
   }
 
   function readConnectLink() {
@@ -293,7 +293,7 @@
 
   function startApp() {
     S.route = routeFromHash();
-    S.ovErr = ''; S.cuErr = '';
+    S.ovErr = ''; S.cuErr = ''; S.ibErr = '';
     S.user = S.user || load(LS.user);
     S.links = S.links || load(LS.links);
     S.hqName = S.hqName || load(LS.name) || '';
@@ -319,13 +319,14 @@
     if (!tokenOk(S.token, 300)) { reauth().catch(function () { /* banner already offers a button */ }); return; }
     // The Overview reads the sheet again every 5 minutes while it's on screen.
     if (S.route === 'overview' && S.ov && !S.busy.ov && Date.now() - (S.ovAt || 0) > 5 * 60000) fetchOverview(false);
+    if (S.route === 'inbox' && S.ib && !S.busy.ib && !S.busy.sort && Date.now() - (S.ibAt || 0) > 5 * 60000) fetchInbox();
   }
 
   function refused() {
     S.refused = true;
     var email = (S.claims && S.claims.email) || 'that account';
     try { google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
-    S.token = null; sset(SS_TOKEN, null); store(LS.user, null); store(LS.links, null); S.user = null; S.links = null; S.ov = null; S.cu = null;
+    S.token = null; sset(SS_TOKEN, null); store(LS.user, null); store(LS.links, null); S.user = null; S.links = null; S.ov = null; S.cu = null; S.ib = null; S.gen++;
     renderSignin('Your HQ script turned away ' + email + '. HQ only opens for the account in ALLOWED_EMAIL, signed in to this app’s client ID (HQ_CLIENT_ID).');
   }
 
@@ -454,6 +455,24 @@
     $('#rail').innerHTML = '<div class="mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>' +
       NAV.map(function (n) { return navA(n, 'rail'); }).join('') + avatar;
     $('#tabbar').innerHTML = NAV.map(function (n) { return navA(n, 'tab'); }).join('');
+    navBadges();
+  }
+
+  // Replies waiting to be sorted, on the Inbox tab in the nav
+  function inboxWaiting() {
+    var ov = S.ov && S.ov.inbox ? S.ov.inbox.waiting || 0 : null;
+    if (S.ib && S.ib.counts && (ov == null || (S.ibAt || 0) >= (S.ovAt || 0))) return S.ib.counts.waiting || 0;
+    return ov || 0;
+  }
+  function navBadges() {
+    var n = inboxWaiting();
+    Array.prototype.forEach.call(document.querySelectorAll('#rail a[href="#/inbox"], #tabbar a[href="#/inbox"]'), function (a) {
+      var b = a.querySelector('.badge');
+      if (!n) { if (b) b.remove(); a.setAttribute('aria-label', 'Inbox'); return; }
+      if (!b) { b = document.createElement('span'); b.className = 'badge'; a.appendChild(b); }
+      b.textContent = n > 99 ? '99+' : String(n);
+      a.setAttribute('aria-label', 'Inbox, ' + n + ' to sort');
+    });
   }
 
   function setBanner(kind) { S.banner = kind || ''; var b = $('#banner'); if (b) b.outerHTML = bannerHtml(); else if (kind) renderRoute(); bindBanner(); }
@@ -489,7 +508,7 @@
     var html = '';
     if (S.route === 'overview') html = pageOverview();
     else if (S.route === 'sectors') html = pageSoon('sectors');
-    else if (S.route === 'inbox') html = pageSoon('inbox');
+    else if (S.route === 'inbox') html = pageInbox();
     else if (S.route === 'customers') html = pageCustomers();
     else if (S.route === 'launchpad') html = pageLaunchpad();
     else if (S.route === 'settings') html = pageSettings();
@@ -501,6 +520,8 @@
     if (S.route === 'settings') bindSettings();
     if (S.route === 'overview') bindOverview();
     if (S.route === 'customers') bindCustomers();
+    if (S.route === 'inbox') bindInbox();
+    navBadges();
   }
 
   function head(eyebrow, title, lede, right) {
@@ -536,6 +557,7 @@
     if (n < 7) return DAYS[d.getDay()];
     return d.getDate() + ' ' + MONS[d.getMonth()];
   }
+  function clock(iso) { var d = new Date(iso); return isNaN(d) ? '' : ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
   function money(n, whole) {
     n = Number(n) || 0;
     var cents = !whole && Math.round(n * 100) % 100 !== 0;
@@ -556,10 +578,11 @@
     ['Sectors', 'Lines, show lists, your turn'],
     ['Phone', 'Polish for your phone']
   ];
-  var DONE_STEPS = 3;
+  var DONE_STEPS = 4;
 
   // Your turn: what each next action means, in the order they're shown. First emails are left for batches (step 3).
   var TURN = [
+    ['Reply to them', 'They wrote back: answer them in Gmail.'],
     ['Set up at stand', 'New customer: set them up at their stand.'],
     ['Set-up call', 'New customer: the set-up call.'],
     ['Onboarding call', 'Upgraded customer: the onboarding call.'],
@@ -581,8 +604,11 @@
     if (S.busy.ov) return;
     S.busy.ov = true;
     if (fresh) render();
+    var gen = S.gen;
     call('overview', fresh ? { fresh: true } : {}, { timeout: 90000 }).then(function (j) {
-      S.busy.ov = false; S.ov = j; S.ovErr = ''; S.ovAt = Date.now(); S.offline = false;
+      S.busy.ov = false;
+      if (gen !== S.gen) return;   // signed out meanwhile
+      S.ov = j; S.ovErr = ''; S.ovAt = Date.now(); S.offline = false;
       if (S.route === 'overview') renderRoute();
     }, function (e) {
       S.busy.ov = false;
@@ -618,6 +644,11 @@
     if (o.customers && o.customers.active) lede += ' ' + plural(o.customers.active, 'customer') + ' paying.';
     var html = head(eyebrow, greeting(), lede, refreshBtn('ov-refresh', S.busy.ov, S.ovAt));
     if (S.ovErr) html += '<p class="banner" style="margin:0" role="alert"><span class="grow">' + esc(S.ovErr) + '</span></p>';
+    if (o.warnings && o.warnings.length) {
+      html += '<div class="banner" role="alert"><span class="grow"><b>Check the pipeline sheet’s headers.</b> HQ reads columns by the name in row 1:' +
+        '<ul class="warn-list">' + o.warnings.map(function (w) { return '<li>' + esc(w) + '</li>'; }).join('') + '</ul></span>' +
+        (o.sheetUrl ? '<a class="btn small" href="' + esc(o.sheetUrl) + '" target="_blank" rel="noopener noreferrer">Open the sheet' + I.out + '</a>' : '') + '</div>';
+    }
     html += sendingPanel(o) + tilesRow(o);
     html += '<div class="ov-grid"><div class="ov-main">' + departuresPanel(o) + pipelinePanel(o) + emailsAheadPanel(o) + '</div>' +
       '<div class="ov-side">' + turnPanel(o) + arrivalsPanel(o) + '</div></div>';
@@ -780,12 +811,18 @@
     var due = (o.batches || []).filter(function (b) { return b.dueNow && MENU_HOW[b.stage]; });
     var batchCards = due.map(function (b) {
       return '<article class="ticket"><span class="t-top"><span class="round">' + b.dueNow + '</span><span class="t-tag">BATCH ' + esc(b.id) + ' · ' + esc(b.show.toUpperCase()) + '</span></span>' +
-        '<b class="t-title">Send ' + esc(b.id) + ': ' + esc(STEP_NAME[b.stage]) + '</b><span class="t-sub">In Prospects, filter Batch to ' + esc(b.id) + ' and Stage to ' + esc(b.stageFilter) + ', select the rows, then ' + esc(MENU_HOW[b.stage]) + '.</span></article>';
+        '<b class="t-title">Send ' + esc(b.id) + ': ' + esc(STEP_NAME[b.stage]) + '</b><span class="t-sub">In Prospects, filter Batch to ' + esc(b.id) + ' and Stage to ' + esc(b.stageFilter) + ', select the rows, then ' + esc(MENU_HOW[b.stage]) + '.' +
+        (b.pausedWho && b.pausedWho.length ? ' Sort the replies from ' + esc(b.pausedWho.join(', ')) + ' in the Inbox first, or leave them out.' : '') + '</span></article>';
     }).join('');
     var yours = o.yours && o.yours.count ? '<article class="ticket"><span class="t-top"><span class="round">' + o.yours.count + '</span><span class="t-tag">' + esc(o.yours.shows.map(function (s) { return s.name + (o.yours.shows.length > 1 ? ' ' + s.count : ''); }).join(' · ').toUpperCase()) + '</span></span>' +
-      '<b class="t-title">Write to your engaged prospects</b><span class="t-sub">Hot or warm on your website, so they’re kept out of batches. Their next email is due: write to them yourself.</span></article>' : '';
-    cards = batchCards + yours + cards;
-    var count = (o.setup || []).length + items.length + due.length + (yours ? 1 : 0);
+      '<b class="t-title">Write to your engaged prospects</b><span class="t-sub">Engaged (they replied, or were hot or warm on your website), so they’re kept out of batches. Their next email is due: write to them yourself.</span></article>' : '';
+    var ib = o.inbox || {};
+    var inboxCard = '';
+    if (!ib.installed) inboxCard = '<a class="ticket" href="#/inbox"><span class="t-top"><span class="t-tag">INBOX · ONE-TIME SET-UP</span></span><b class="t-title">Turn on the Inbox</b><span class="t-sub">Add the HQInbox file to the pipeline’s script and run it once. The Inbox page shows how.</span></a>';
+    else if (ib.waiting) inboxCard = '<a class="ticket" href="#/inbox"><span class="t-top"><span class="round">' + ib.waiting + '</span><span class="t-tag">INBOX</span></span><b class="t-title">Sort ' + esc(plural(ib.waiting, 'reply', 'replies')) + '</b><span class="t-sub">HQ keeps them out of batches until you do. A real reply moves them to Engaged, with Reply to them due today.</span></a>';
+    else if (ib.stale) inboxCard = '<a class="ticket" href="#/inbox"><span class="t-top"><span class="t-tag">INBOX</span></span><b class="t-title">The Gmail check has stopped</b><span class="t-sub">It last ran ' + esc(ib.checked ? relDay(ymdOf(new Date(ib.checked))) + ' at ' + clock(ib.checked) : 'a while ago') + '. The Inbox page says what to check.</span></a>';
+    cards = inboxCard + batchCards + yours + cards;
+    var count = (o.setup || []).length + items.length + due.length + (yours ? 1 : 0) + (inboxCard ? 1 : 0);
     return '<section class="turn" aria-labelledby="turn-h"><div class="turn-head"><h2 id="turn-h">Your turn</h2>' + (count ? '<span class="count">' + count + '</span>' : '') + '</div>' +
       '<p class="sub small" style="margin:0">Next actions due by today in your sheet, grouped. Yellow means it’s waiting on you.</p>' +
       (cards || '<p class="note" style="margin:0">Nothing waiting on you today.</p>') +
@@ -800,7 +837,7 @@
     return '<section class="panel" aria-labelledby="arr-h"><div class="panel-head"><div><span class="live"><h2 class="h2" id="arr-h">Arrivals</h2><span class="pulse' + (S.offline ? ' off' : '') + '"></span></span>' +
       '<span class="sub small">Replies, bounces, visits and sales from the last 7 days.</span></div></div>' +
       (rows ? '<div class="arrs">' + rows + '</div>' : '<p class="note" style="margin:0">Nothing in the last 7 days.</p>') +
-      '<p class="note" style="margin:0">Real replies you read in Gmail. Step 4 brings them into an inbox here.</p></section>';
+      '<p class="note" style="margin:0">Replies are sorted in the <a href="#/inbox">Inbox</a>. Read and answer them in Gmail.</p></section>';
   }
 
   function buildLine() {
@@ -809,7 +846,7 @@
       return '<div class="stop ' + cls + '" title="' + esc(s[1]) + '"><span class="st"></span><small>STEP ' + (i + 1) + '</small><span class="t">' + esc(s[0]) + '</span></div>';
     }).join('');
     return '<section class="panel" aria-labelledby="ov-line"><div class="panel-head"><div><span class="eyebrow">Build</span><h2 class="h3" id="ov-line">The HQ line</h2>' +
-      '<span class="sub small">Each stop is one release. Next: an inbox for replies and bounces.</span></div></div>' +
+      '<span class="sub small">Each stop is one release. Next: autopilot, sending batches by your show dates.</span></div></div>' +
       '<div class="line-track" role="list">' + stops + '</div></section>';
   }
 
@@ -818,6 +855,7 @@
     var r = $('#ov-refresh'); if (r) r.onclick = function () { fetchOverview(true); };
     var t = $('#ov-retry'); if (t) t.onclick = function () { S.ovErr = ''; renderRoute(); fetchOverview(true); };
     if (!S.ov && !S.ovErr && !S.busy.ov && S.token) fetchOverview(false);
+    else if (S.ov && S.ovDirty && !S.busy.ov && S.token) { S.ovDirty = false; fetchOverview(true); }
   }
 
   // ------------------------------------------------------------------------------------------------ Batches (release 3)
@@ -854,7 +892,8 @@
     var rows = bs.map(function (b, i) {
       var c = b.counts || {};
       var extra = [];
-      if (c.yours) extra.push(c.yours + ' engaged: yours');
+      if (c.paused) extra.push(c.paused + ' replied: sort in the Inbox');
+      if (c.yours - (c.paused || 0) > 0) extra.push((c.yours - (c.paused || 0)) + ' engaged: yours');
       if (c.out) extra.push(c.out + ' out (opted out, bounced or can’t email)');
       return '<article class="dep" style="--lc:' + lineVar(b.line) + '">' +
         '<span class="dep-pos mono">' + b.position + '</span>' +
@@ -863,7 +902,8 @@
         stageTrack(b) +
         '<span class="sub small">' + esc(batchStatus(b)) + '</span>' +
         '<span class="muted small">' + esc(plural(b.members, 'prospect') + ' · started at ' + b.startStep + (b.sent.first ? ' · ' + b.sent.first + ' first emails sent' : '') + (b.sent.day2 ? ', ' + b.sent.day2 + ' Day 2' : '') + (b.sent.last ? ', ' + b.sent.last + ' Last touch' : '') + (extra.length ? ' · ' + extra.join(', ') : '')) + '</span>' +
-        (b.dueNow && MENU_HOW[b.stage] ? '<p class="how small">To send: in Prospects, filter <b>Batch</b> to <b>' + esc(b.id) + '</b> and <b>Stage</b> to <b>' + esc(b.stageFilter) + '</b>, select the rows, then ' + esc(MENU_HOW[b.stage]) + '. The menu skips anyone who shouldn’t get it.</p>' : '') +
+        (b.dueNow && MENU_HOW[b.stage] ? '<p class="how small">To send: in Prospects, filter <b>Batch</b> to <b>' + esc(b.id) + '</b> and <b>Stage</b> to <b>' + esc(b.stageFilter) + '</b>, select the rows, then ' + esc(MENU_HOW[b.stage]) + '. The menu skips opted-out, bounced and already-sent rows.' +
+          (b.pausedWho && b.pausedWho.length ? ' <b>Leave out ' + esc(b.pausedWho.join(', ')) + (c.paused > b.pausedWho.length ? ' and ' + (c.paused - b.pausedWho.length) + ' more' : '') + '</b>: they replied, and the menu doesn’t know. Better: sort them in the Inbox first.' : '') + '</p>' : '') +
         '</div><div class="dep-tools">' +
         '<button class="icon-btn" data-bmove="up" data-id="' + esc(b.id) + '" aria-label="Move ' + esc(b.id) + ' up"' + (i === 0 ? ' disabled' : '') + '>' + I.up + '</button>' +
         '<button class="icon-btn" data-bmove="down" data-id="' + esc(b.id) + '" aria-label="Move ' + esc(b.id) + ' down"' + (i === bs.length - 1 ? ' disabled' : '') + '>' + I.down + '</button>' +
@@ -922,15 +962,161 @@
       sectors: ['Sectors', 6, 'Shows, exhibitors and sector lines', [
         'Everything the Exhibitor Leads app does: shows, exhibitors, checks, Why this result?, Find on Companies House, rechecks and CSV.',
         'Go for new shows, with a fast lane for confirmed limited companies on Google Workspace or Microsoft 365.',
-        'Then a line per sector, with your turn steps and show lists (step 7).']],
-      inbox: ['Inbox', 4, 'Every reply and bounce', [
-        'Each reply with its first line, and a guess: real or automatic.',
-        'Confirm with one tap. A real reply moves the prospect to Engaged.',
-        'Bounces with the reason, and the address marked so it’s never emailed again.']]
+        'Then a line per sector, with your turn steps and show lists (step 7).']]
     }[which];
     return head('ARRIVES IN STEP ' + p[1], p[0], esc(p[2]) + '.') +
       '<section class="panel"><span class="tag">STEP ' + p[1] + '</span><div class="soon"><ul>' +
       p[3].map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div></section>';
+  }
+
+  // ------------------------------------------------------------------------------------------------ Inbox (release 4)
+  // The pipeline's HQInbox file logs messages from prospects to the Inbox tab every hour. HQ shows them and you sort
+  // the new ones. Kept in memory only, like the rest of your pipeline.
+  var SORTED_TAG = { 'Real reply': ['REAL REPLY', 'yellow'], 'Automatic': ['AUTOMATIC', 'muted'], 'No thanks': ['NO THANKS', 'coral'], 'Not a reply': ['NOT A REPLY', 'muted'], 'Opted out': ['OPTED OUT', 'coral'] };
+
+  function fetchInbox() {
+    if (S.busy.ib) return;
+    S.busy.ib = true;
+    if (S.route === 'inbox') renderRoute();
+    var gen = S.gen, seq = S.ibSeq;
+    call('inbox', {}, { timeout: 90000 }).then(function (j) {
+      S.busy.ib = false;
+      if (gen !== S.gen || seq !== S.ibSeq) return;   // signed out, or a sort has a newer copy
+      S.ib = j.inbox; S.ibErr = ''; S.ibAt = Date.now();
+      if (S.ov && S.ov.inbox) S.ov.inbox.waiting = j.inbox.counts ? j.inbox.counts.waiting : 0;
+      if (S.route === 'inbox') renderRoute(); else navBadges();
+    }, function (e) {
+      S.busy.ib = false;
+      S.ibErr = e.kind === 'signin' ? 'Sign in again to see your inbox.' : e.message === 'Unknown action' ? 'Your HQ script is still release ' + (S.build || 1) + '. Paste the new Code.gs and deploy a new version to see your inbox.' : e.message;
+      if (S.route === 'inbox') renderRoute();
+    });
+  }
+
+  function inboxSetup() {
+    return '<section class="panel" aria-labelledby="ib-setup"><div class="panel-head"><div><span class="eyebrow">One-time set-up</span><h2 class="h2" id="ib-setup">Turn on the Inbox</h2>' +
+      '<span class="sub small">The pipeline’s script reads your Gmail, as it does for “no thanks” and bounces. HQ never does: it reads the Inbox tab the pipeline writes.</span></div></div>' +
+      '<ol class="steps-n">' +
+      '<li>Open the Showsum Pipeline sheet, then <b>Extensions → Apps Script</b>.</li>' +
+      '<li>Next to <b>Files</b>, press <b>+ → Script</b> and name it <b>HQInbox</b>. Paste in <b>HQInbox.gs</b> from this release, then save.</li>' +
+      '<li>In the function list at the top, choose <b>hqInboxSetUp</b> and press <b>Run</b>. It makes the Inbox tab, logs the last 30 days and turns on the hourly check.</li>' +
+      '<li>Come back here and press <b>Refresh</b>.</li></ol>' +
+      '<p class="note" style="margin:0">Nothing in the pipeline’s own code changes. To turn it off, delete the hqInboxHourly trigger (Apps Script → Triggers).</p></section>';
+  }
+
+  function msgCard(x) {
+    var meta = [x.show, x.stage ? 'Stage: ' + x.stage : '', x.rows > 1 ? x.rows + ' rows in Prospects' : x.rows ? '' : 'Not matched to a Prospects row'].filter(Boolean).join(' · ');
+    return '<article class="msg">' +
+      '<div class="msg-head"><span class="ftag ' + (x.guess === 'Automatic' ? 'muted' : x.guess === 'No thanks' ? 'coral' : 'yellow') + '">' + (x.guess === 'Automatic' ? 'LOOKS AUTOMATIC' : x.guess === 'No thanks' ? 'LOOKS LIKE NO THANKS' : 'LOOKS REAL') + '</span>' +
+      '<span class="mono muted small">' + esc(timeLabel(x.t)) + '</span></div>' +
+      '<div class="msg-who"><b>' + esc(x.who) + '</b>' + (meta ? '<span class="muted small">' + esc(meta) + '</span>' : '') + '</div>' +
+      (x.subject ? '<span class="msg-subj">' + esc(x.subject) + '</span>' : '') +
+      (x.first ? '<p class="msg-first">' + esc(x.first) + '</p>' : '<p class="msg-first muted">No text above the quoted email.</p>') +
+      (x.guess === 'No thanks' ? '<p class="note" style="margin:0">From someone else at their company, so the pipeline’s “no thanks” check won’t opt them out. Opt them out here if they want no more emails.</p>' : '') +
+      '<div class="msg-acts">' +
+      '<button class="btn small yellow" data-sort="real" data-id="' + esc(x.id) + '" data-who="' + esc(x.who) + '">Real reply</button>' +
+      '<button class="btn small" data-sort="automatic" data-id="' + esc(x.id) + '" data-who="' + esc(x.who) + '">Automatic</button>' +
+      '<button class="btn small ghost" data-sort="not" data-id="' + esc(x.id) + '" data-who="' + esc(x.who) + '">Not a reply</button>' +
+      '<button class="btn small danger" data-sort="optout" data-id="' + esc(x.id) + '" data-who="' + esc(x.who) + '">Opt them out</button>' +
+      (x.gmail ? '<a class="btn small ghost" href="' + esc(x.gmail) + '" target="_blank" rel="noopener noreferrer">Open in Gmail' + I.out + '</a>' : '') +
+      '</div></article>';
+  }
+
+  function pageInbox() {
+    var b = S.ib;
+    var eyebrow = 'INBOX · ' + esc(nowLine().split(' · ')[0]);
+    var lede = 'Messages from your prospects, from Gmail every hour, 7am to 9pm. Sort the new ones: until you do, HQ keeps them out of batches.';
+    if (!b) {
+      return head(eyebrow, 'Inbox', lede) +
+        (S.ibErr ? '<section class="panel"><p class="error" style="margin:0" role="alert">' + esc(S.ibErr) + '</p><div class="actions"><button class="btn small" id="ib-retry">' + I.refresh + 'Try again</button></div></section>'
+          : '<section class="panel"><span class="loading"><span class="spinner"></span>Reading the Inbox tab</span></section>');
+    }
+    var c = b.counts || {};
+    var title = !b.installed ? 'Inbox' : c.waiting ? plural(c.waiting, 'reply', 'replies') + ' to sort' : 'All sorted';
+    var html = head(eyebrow, title, lede, refreshBtn('ib-refresh', S.busy.ib, S.ibAt));
+    if (S.ibErr) html += '<p class="banner" style="margin:0" role="alert"><span class="grow">' + esc(S.ibErr) + '</span></p>';
+    if (!b.installed) html += inboxSetup();
+    else {
+      if (b.stale) html += '<p class="banner" style="margin:0" role="alert"><span class="grow">The hourly Gmail check last ran ' + esc(b.checked ? relDay(ymdOf(new Date(b.checked))) + ' at ' + clock(b.checked) : 'a while ago') +
+        '. In the pipeline’s Apps Script, open Triggers and check hqInboxHourly is there and not failing. Running hqInboxSetUp again puts it back.</span></p>';
+      // To sort
+      html += '<section class="panel" aria-labelledby="ib-new"><div class="panel-head"><div><span class="eyebrow">New · ' + (c.waiting || 0) + '</span><h2 class="h2" id="ib-new">To sort</h2>' +
+        '<span class="sub small">Read it in Gmail if you need to. <b>Real reply</b> moves them to Engaged with Reply to them due today. <b>Automatic</b> and <b>Not a reply</b> put them back in their batch. <b>Opt them out</b> if they asked for no more emails.</span></div></div>' +
+        (b.waiting.length ? '<div class="msgs">' + b.waiting.map(msgCard).join('') + '</div>' : '<p class="note" style="margin:0">Nothing new from your prospects. The pipeline checks again within the hour.</p>') +
+        (b.waitingMore ? '<p class="note" style="margin:0">' + plural(b.waitingMore, 'more', 'more') + ' after these: sort some and refresh.</p>' : '') + '</section>';
+      // Sorted
+      var sorted = b.sorted.map(function (x) {
+        var tag = SORTED_TAG[x.status] || [x.status.toUpperCase(), 'muted'];
+        var acts = (x.moves || []).map(function (m) {
+          return m === 'real' ? '<button class="linkish" data-sort="real" data-id="' + esc(x.id) + '" data-who="' + esc(x.who) + '">It’s a real reply</button>'
+            : m === 'back' ? '<button class="linkish" data-sort="back" data-id="' + esc(x.id) + '" data-who="' + esc(x.who) + '">Put back to sort</button>'
+            : m === 'optout' && x.holding ? '<span class="muted">Not opted out yet, so HQ holds them back.</span><button class="linkish" data-sort="optout" data-id="' + esc(x.id) + '" data-who="' + esc(x.who) + '">Opt them out now</button>' : '';
+        }).join('');
+        return '<div class="arr"><span class="mono muted">' + esc(timeLabel(x.t)) + '</span><span class="ftag ' + tag[1] + '">' + esc(tag[0]) + '</span>' +
+          '<span class="arr-tx"><b>' + esc(x.who) + '</b><span>' + esc([x.subject, x.show].filter(Boolean).join(' · ')) + '</span>' +
+          (acts || x.gmail ? '<span class="arr-acts">' + acts + (x.gmail ? '<a href="' + esc(x.gmail) + '" target="_blank" rel="noopener noreferrer">Gmail</a>' : '') + '</span>' : '') + '</span></div>';
+      }).join('');
+      html += '<section class="panel" aria-labelledby="ib-sorted"><div class="panel-head"><div><span class="eyebrow">Last 30 days</span><h2 class="h3" id="ib-sorted">Sorted</h2>' +
+        '<span class="sub small">' + esc(plural(c.real || 0, 'real reply', 'real replies') + ', ' + (c.automatic || 0) + ' automatic, ' + (c.noThanks || 0) + ' “no thanks”.') + ' Automatic ones are labelled in Gmail and never answered.</span></div></div>' +
+        (sorted ? '<div class="arrs">' + sorted + '</div>' : '<p class="note" style="margin:0">Nothing sorted in the last 30 days.</p>') + '</section>';
+    }
+    // Bounces and opt-outs, from Touches
+    var list = function (rows, tag, tone, sub) {
+      return rows.length ? '<div class="arrs">' + rows.map(function (x) {
+        return '<div class="arr"><span class="mono muted">' + esc(timeLabel(x.t)) + '</span><span class="ftag ' + tone + '">' + tag + '</span><span class="arr-tx"><b>' + esc(x.who) + '</b><span>' + esc([sub, x.show].filter(Boolean).join(' · ')) + '</span></span></div>';
+      }).join('') + '</div>' : '<p class="note" style="margin:0">None in the last 30 days.</p>';
+    };
+    html += '<div class="grid-2"><section class="panel"><div class="panel-head"><div><span class="eyebrow">Last 30 days · ' + b.bounces.length + '</span><h2 class="h3">Bounces</h2>' +
+      '<span class="sub small">Marked Can email “No (bounced)” by the pipeline, so they’re never emailed again. Next action: find a working email.</span></div></div>' + list(b.bounces, 'BOUNCE', 'coral', 'Find a working email') + '</section>' +
+      '<section class="panel"><div class="panel-head"><div><span class="eyebrow">Last 30 days · ' + b.optOuts.length + '</span><h2 class="h3">No thanks</h2>' +
+      '<span class="sub small">Opted out by the pipeline’s “no thanks” check, or by you here. No more emails, as asked.</span></div></div>' + list(b.optOuts, 'OPTED OUT', 'coral', '') + '</section></div>';
+    if (b.installed) html += '<p class="note" style="margin:0">' + (b.checked ? 'Gmail last checked ' + esc(relDay(ymdOf(new Date(b.checked))) + ' at ' + clock(b.checked)) + '. ' : '') +
+      'Every hour from 7am to 9pm the pipeline logs anything new from a prospect here. Its no-thanks, bounce and auto-reply checks run as before: at 8am and before every send. HQ never opens your Gmail.</p>';
+    return html;
+  }
+
+  function bindInbox() {
+    var r = $('#ib-refresh'); if (r) r.onclick = function () { if (!S.busy.sort) fetchInbox(); };
+    var t = $('#ib-retry'); if (t) t.onclick = function () { S.ibErr = ''; fetchInbox(); };
+    $('#main').onclick = function (ev) {
+      var btn = ev.target.closest('[data-sort]');
+      if (!btn || S.busy.sort) return;
+      var as = btn.dataset.sort, who = btn.dataset.who || 'this prospect';
+      if (as === 'real' && !window.confirm('A real reply from ' + who + '?\n\nIn Prospects, New or Emailed rows move to Engaged with “Reply to them” due today, and a line goes in Notes and Touches. Batches leave them out from now on.')) return;
+      if (as === 'optout' && !window.confirm('Opt ' + who + ' out?\n\nEvery row of theirs in Prospects becomes Opted out, with its next action cleared, as the pipeline’s “no thanks” check does. They’re never emailed again.')) return;
+      S.busy.sort = true;
+      var gen = S.gen;
+      Array.prototype.forEach.call(document.querySelectorAll('[data-sort]'), function (x) { x.disabled = true; });
+      call('confirmReply', { id: btn.dataset.id, as: as }, { timeout: 120000 }).then(function (j) {
+        S.busy.sort = false;
+        if (gen !== S.gen) return;
+        S.ibSeq++;
+        S.ib = j.inbox; S.ibAt = Date.now(); S.ovDirty = true;
+        if (S.ov && S.ov.inbox) S.ov.inbox.waiting = j.inbox.counts ? j.inbox.counts.waiting : 0;
+        if (S.route === 'inbox') renderRoute();
+        toast(sortedLine(j.done));
+      }, function (e) {
+        S.busy.sort = false;
+        S.ibSeq++;   // it may have saved part-way: read again
+        if (gen === S.gen && S.route === 'inbox') fetchInbox();
+        Array.prototype.forEach.call(document.querySelectorAll('[data-sort]'), function (x) { x.disabled = false; });
+        toast(e.kind === 'signin' ? 'Sign in again, then try once more.' : e.message, true);
+      });
+    };
+    if (!S.ib && !S.ibErr && !S.busy.ib && S.token) fetchInbox();
+    // The Overview has read newer replies since this page was last read
+    else if (S.ib && S.ov && S.ov.inbox && (S.ovAt || 0) > (S.ibAt || 0) && S.ov.inbox.waiting !== S.ib.counts.waiting && !S.busy.ib && !S.busy.sort && S.token) fetchInbox();
+  }
+
+  function sortedLine(d) {
+    if (!d) return 'Saved';
+    if (d.as === 'back') return d.who + ': back to sort';
+    if (d.as === 'optout') return d.who + ': ' + (d.prospects && d.prospects.optedOut ? 'opted out. They won’t be emailed again.' : 'already opted out.');
+    if (d.as !== 'real') return d.who + ': ' + d.status.toLowerCase() + '. Their emails carry on as planned.';
+    var p = d.prospects || {};
+    if (!p.rows) return d.who + ': real reply. No Prospects row has their code, so nothing else changed.';
+    if (p.engaged) return d.who + ': Engaged, Reply to them due today';
+    if (p.actions) return d.who + ': Reply to them due today';
+    return d.who + ': real reply. Left as ' + (p.kept[0] || 'it was') + ' in Prospects';
   }
 
   // ------------------------------------------------------------------------------------------------ Customers
@@ -940,8 +1126,11 @@
     if (S.busy.cu) return;
     S.busy.cu = true;
     if (S.route === 'customers') renderRoute();
+    var gen = S.gen;
     call('customers', {}, { timeout: 90000 }).then(function (j) {
-      S.busy.cu = false; S.cu = j.customers; S.cuErr = ''; S.cuAt = Date.now();
+      S.busy.cu = false;
+      if (gen !== S.gen) return;
+      S.cu = j.customers; S.cuErr = ''; S.cuAt = Date.now();
       if (S.route === 'customers') renderRoute();
     }, function (e) {
       S.busy.cu = false;
