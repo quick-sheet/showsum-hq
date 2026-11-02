@@ -487,3 +487,36 @@ a.ticket:hover { transform: translateY(-1px); }
   .msg { padding: 14px; }
   .msg-acts .btn { flex: 1 1 auto; }
 }
+
+/* ---------- Release 5: autopilot ---------- */
+.segs { display: inline-flex; padding: 3px; gap: 3px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); }
+.seg { min-height: 34px; padding: 0 14px; border: 0; border-radius: 9px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.seg:hover:not([disabled]) { color: var(--text); background: var(--tile); }
+.seg.on { color: var(--text); background: var(--tile); cursor: default; }
+.seg.on.seg-dry { color: var(--sky); background: rgba(143,199,255,.12); }
+.seg.on.seg-live { color: var(--yellow-ink); background: var(--yellow); }
+.panel.ap.ap-live { border-color: #6b5a1f; }
+.ap-check { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border-radius: 14px; background: var(--yellow); color: var(--yellow-ink); }
+.ap-check span { color: var(--yellow-sub); font-size: 13.5px; }
+.ap-check .btn { border-color: var(--yellow-ink); }
+.ap-check .btn.yellow { background: var(--yellow-ink); color: var(--yellow); }
+.ap-check .btn:not(.yellow) { background: transparent; color: var(--yellow-ink); }
+.ap-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 18px; }
+.ap-cols > div { min-width: 0; }
+.ap .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.dep-name .chip { margin-left: 4px; }
+.dep.started { border-color: rgba(126,224,161,.35); }
+.dep-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.members { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: var(--ground); border: 1px solid var(--line-soft); }
+.mem-list { display: flex; flex-direction: column; }
+.mem { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line-soft); }
+.mem:first-child { border-top: 0; }
+.mem-tx { display: flex; flex-direction: column; min-width: 0; }
+.mem-tx b { font-weight: 600; overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .segs { width: 100%; }
+  .seg { flex: 1 1 0; }
+  .mem { grid-template-columns: minmax(0, 1fr) auto; }
+  .mem .ftag { grid-column: 1 / -1; }
+}
+.panel-head > .segs { flex-direction: row; align-self: flex-start; }

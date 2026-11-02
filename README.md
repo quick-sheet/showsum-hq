@@ -2,7 +2,7 @@
 
 G's private control room for the Showsum outreach engine: one app on desktop and phone that sits over the existing Showsum Pipeline and Exhibitor Leads scripts.
 
-**Release 4:** the Inbox. The pipeline checks Gmail every hour and logs messages from prospects to an Inbox tab; HQ shows them and you sort each new one with a tap. A real reply moves the prospect to Engaged with "Reply to them" due today, and HQ keeps anyone with a reply waiting out of batches. Release 3 brought batches; release 2 the live Overview and Customers; release 1 the shell, the Google sign-in lock, Launchpad and Settings. HQ sends no email yet: you send each batch from the Showsum menu until autopilot (step 5).
+**Release 5:** autopilot. You start batches in HQ; the pipeline's HQAutopilot file emails them on weekday mornings, through the pipeline's own templates, Gmail alias, rules and limits. Dry run first; after each switch to Live, the first run sends 5 and waits for your check. Release 4 brought the Inbox; release 3 batches; release 2 the live Overview and Customers; release 1 the shell, the Google sign-in lock, Launchpad and Settings.
 
 Lives at **https://hq.quick-sheet.com** (GitHub Pages with its own subdomain, so no other app shares its address).
 
@@ -15,14 +15,15 @@ HQ app (this repo, GitHub Pages)          no links, sheet IDs or secrets in here
 HQ script (apps-script/Code.gs, a standalone Apps Script web app)
    │  checks the sign-in with Google: this app's client ID + ALLOWED_EMAIL, verified, not expired
    ├── reads: Showsum Pipeline sheet · Exhibitor Leads data · Showsum database
-   ├── writes only: the Batch column on Prospects and its own Batches tab (when you make, move or remove a batch);
-   │   the Inbox row you sort, and for a real reply or an opt-out that prospect's Stage, Next action, its date, Notes, and a Touches line
-   ├── later: asks the pipeline web app to act (autopilot)
+   ├── writes only: the Batch column on Prospects and its own Batches tab (make, move, start, pause, remove a batch,
+   │   take someone out); the Inbox row you sort, and for a real reply or an opt-out that prospect's Stage, Next action,
+   │   its date, Notes, and a Touches line; the HQ settings tab (autopilot Off / Dry run / Live, dry run, your check)
    └── Launchpad links and settings live in its Script Properties
 HQ app ──► Exhibitor Leads web app directly (later release; it accepts the same sign-in)
 
-Pipeline script + HQInbox.gs (apps-script/pipeline/, pasted into the pipeline's own Apps Script project)
-   └── every hour, 7am–9pm: logs new messages from prospects to the Inbox tab. HQ never opens Gmail.
+Pipeline script + HQInbox.gs + HQAutopilot.gs (apps-script/pipeline/, pasted into the pipeline's own Apps Script project)
+   ├── HQInbox, every hour, 7am–9pm: logs new messages from prospects to the Inbox tab. HQ never opens Gmail.
+   └── HQAutopilot, every 10 minutes: sends started batches on weekdays 08:30–11:30 (or a dry run), logs to the Autopilot tab.
 ```
 
 - The pipeline sheet stays the master record. HQ adds a few tabs of its own in later releases (Batches, Inbox, Sectors, Show list, HQ settings).
@@ -48,7 +49,8 @@ Pipeline script + HQInbox.gs (apps-script/pipeline/, pasted into the pipeline's 
   - when you sort a reply: that Inbox row's Status and Confirmed cells. For a real reply also the prospect's Stage (New or Emailed become Engaged; other stages are left as you set them), Next action, Next action date and a line at the top of Notes, and one "Real reply" line in Touches. For an opt-out, their rows become Opted out with the next action cleared, a Notes line, and one "Opted out" line in Touches.
 
   The tests fail if it writes anywhere else. Before writing to Prospects it reads the Code column again, and if any row moved it saves nothing. It finds the Inbox row by its Message ID again just before writing its Status. Stage is written last and the Notes and Touches lines aren't repeated, so trying again after a failure finishes the job. Its own settings live in its Script Properties: the Launchpad, the name HQ calls you, and which customers are tests.
-- HQ's script never touches Gmail. The pipeline's HQInbox file reads it, as the pipeline already does for "no thanks" and bounces, and only adds rows to the Inbox tab.
+- HQ's script never touches Gmail. The pipeline's HQInbox file reads it, as the pipeline already does for "no thanks" and bounces, and only adds rows to the Inbox tab. The pipeline's HQAutopilot file sends, exactly as the Showsum menu does.
+- Switching autopilot to Live, pressing Continue after the first-emails check, and starting a batch while autopilot is Live need a sign-in from the last 10 minutes. The app renews it by itself and tries again.
 - The app drops any answer that arrives after you sign out.
 - The sign-in sits in the browser tab's session storage and is gone when the tab closes. The app keeps the connection (script address, client ID) and a copy of your Launchpad on the device for offline opening.
 - The service worker only keeps the app's own files. Nothing from your scripts is cached.
@@ -109,7 +111,25 @@ If `Code.gs` changed, also bump `BUILD` in `Code.gs` and `EXPECT_BUILD` in `hq.j
 - **To turn it off:** delete the `hqInboxHourly` trigger (Apps Script → Triggers). The Inbox tab stays as a record.
 - The Overview warns if a header HQ relies on is missing or repeated in Prospects, Shows, Touches or Inbox (HQ reads columns by their row 1 name).
 
+## Autopilot
+
+- **Set-up, once:** in the pipeline's Apps Script, + → Script, name it `HQAutopilot`, paste in `apps-script/pipeline/HQAutopilot.gs`, save, choose `hqAutopilotSetUp` and press Run. It adds the HQ settings and Autopilot tabs and a 10-minute trigger. Autopilot starts **Off**. Nothing in the pipeline's own code changes.
+- **Batches:** open **Members** on a batch to see who's in it and what autopilot will do for each (due now, waiting, replied, engaged, not sent and why); take out anyone you don't want emailed. Press **Start**. Autopilot only ever emails started batches, top of the board first. **Pause** stops a batch at once.
+- **Modes (on the Autopilot panel):**
+  - **Off:** nothing is sent.
+  - **Dry run:** once each weekday morning in the window it works out exactly what it would send, logs it to the Autopilot tab and Telegram, and sends nothing. **Dry run now** asks for one straight away, at any hour (within 10 minutes).
+  - **Live:** in each sending window (weekdays 08:30–11:30, London; not bank holidays or 20 Dec – 3 Jan) it sends up to 20 emails a run, every 10 minutes, within the day's limit and the bounce hold from the Send limits tab. After each switch to Live, the first run sends 5 and waits: check them in Gmail Sent and press **Continue**.
+- **What it sends:** each member's next email when it's due: the first email (A for Google Workspace, B otherwise) from 14 days before the show up to the day before it starts; Day 2 two days after the show ends; Last touch 12 days after Day 2; Season planning in the second week of January. Before each email it checks again with the Showsum menu's own skip rules, and never emails anyone opted out, bounced, without "Yes" in Can email, engaged, with a reply waiting in the Inbox, or already sent that email. It sends and records each one exactly as the menu does (Touches note "Autopilot B01").
+- **Safety:** before each live run it checks the Inbox (HQInbox.gs must be in the pipeline project too) and runs the "no thanks" check; if either fails, nothing is sent. Each email's row is read again just before it goes. The Touches line is written straight after each email; if an email that went can't be recorded, autopilot switches itself Off and tells you (Telegram and the Autopilot panel), so nothing is sent twice. Three failed sends in a row also switch it off. Don't send from the Showsum menu while autopilot is Live.
+- **The plan is HQ's own:** HQAutopilot.gs carries a copy of HQ's planning code, rebuilt with every release, so the preview on the Overview, the dry run and the live sends agree. Paste the new HQAutopilot.gs whenever a release includes it.
+- **To stop at once:** switch it Off in HQ, or delete the `hqAutopilotTick` trigger.
+
 ## Releases
+
+- **5** (2 Nov 2026):
+  - Autopilot: HQAutopilot.gs for the pipeline (10-minute trigger, sending window, dry run, live sends as the menu sends them, the 5-email check, log tab, Telegram).
+  - Overview: an Autopilot panel (Off / Dry run / Live, what the next run sends, recent runs, Dry run now, Continue); Start, Pause and Members on each batch, with Take out.
+  - Your turn: batches ready to start, and the first-emails check.
 
 - **4** (1 Nov 2026):
   - Inbox page: replies to sort (real, automatic, not a reply, opt them out), with their first line, show, stage and a link to the Gmail thread; the last 30 days sorted; bounces and "no thanks".

@@ -1,9 +1,9 @@
-/* Showsum HQ · app (release 4: Inbox; batches; live Overview and Customers; shell, sign-in, Launchpad, Settings) */
+/* Showsum HQ · app (release 5: autopilot; Inbox; batches; live Overview and Customers; shell, sign-in, Launchpad, Settings) */
 (function () {
   'use strict';
 
-  var APP_VERSION = 4;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
-  var EXPECT_BUILD = 4;      // the HQ Apps Script release this app expects
+  var APP_VERSION = 5;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
+  var EXPECT_BUILD = 5;      // the HQ Apps Script release this app expects
   var LS = { config: 'hq.config', links: 'hq.links', user: 'hq.user', name: 'hq.name' };
   var SS_TOKEN = 'hq.idToken';
   var GSI_SRC = 'https://accounts.google.com/gsi/client';
@@ -19,7 +19,7 @@
     config: null, token: null, claims: null, user: null, links: null, props: null, status: null, statusErr: '',
     build: null, route: 'overview', editing: false, draft: null, offline: false, refused: false, pin: '',
     gsi: null, waiters: [], installEvt: null, banner: '', busy: {},
-    hqName: '', ov: null, ovErr: '', cu: null, cuErr: '', cuFilter: 'all', cuFind: '', ib: null, ibErr: '', gen: 0, ibSeq: 0
+    hqName: '', ov: null, ovErr: '', cu: null, cuErr: '', cuFilter: 'all', cuFind: '', ib: null, ibErr: '', gen: 0, ibSeq: 0, bm: {}, bmOpen: {}, ctrl: 0
   };
 
   // ------------------------------------------------------------------------------------------------ icons
@@ -192,7 +192,7 @@
   function signOut() {
     var done = function () {
       try { if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
-      S.token = null; S.claims = null; S.user = null; S.links = null; S.status = null; S.ov = null; S.cu = null; S.ib = null; S.gen++;
+      S.token = null; S.claims = null; S.user = null; S.links = null; S.status = null; S.ov = null; S.cu = null; S.ib = null; S.bm = {}; S.gen++;
       sset(SS_TOKEN, null);
       store(LS.user, null); store(LS.links, null);
       renderSignin();
@@ -208,6 +208,7 @@
   // ------------------------------------------------------------------------------------------------ talking to the HQ script
   function call(action, data, opts) {
     opts = opts || {};
+    var ctrl = S.ctrl;
     var ready = (S.token && tokenOk(S.token, opts.noReauth ? 0 : 60)) ? Promise.resolve() : (opts.noReauth ? Promise.reject(new HqError('signin', 'signin')) : reauth());
     return ready.then(function () {
       var ctl = new AbortController();
@@ -230,6 +231,17 @@
               return reauth().then(function () { return call(action, data, Object.assign({}, opts, { retried: true })); });
             }
             throw new HqError('signin', 'signin');
+          }
+          if (j && j.error === 'fresh') {
+            // Starting emails needs a sign-in from the last 10 minutes: get one quietly, then try once more.
+            if (!opts.retriedFresh) {
+              return reauth().then(function () {
+                // Switched off or paused while the sign-in was being renewed: that wins.
+                if (opts.guard && ctrl !== S.ctrl) throw new HqError('Not done: you switched autopilot off or paused a batch meanwhile.', 'server');
+                return call(action, data, Object.assign({}, opts, { retriedFresh: true }));
+              });
+            }
+            throw new HqError('Sign in again to do that: it starts emails going.', 'server');
           }
           if (j && j.error === 'retry') throw new HqError(j.message || 'Try again in a moment.', 'retry');
           if (!j || j.error) throw new HqError((j && j.error) || 'Something went wrong.', 'server');
@@ -277,7 +289,7 @@
     [LS.config, LS.links, LS.user, LS.name].forEach(function (k) { store(k, null); });
     sset(SS_TOKEN, null);
     S.config = null; S.token = null; S.user = null; S.links = null; S.status = null; S.gsi = null; S.pin = '';
-    S.ov = null; S.cu = null; S.ib = null; S.hqName = ''; S.gen++;
+    S.ov = null; S.cu = null; S.ib = null; S.bm = {}; S.hqName = ''; S.gen++;
   }
 
   function readConnectLink() {
@@ -326,7 +338,7 @@
     S.refused = true;
     var email = (S.claims && S.claims.email) || 'that account';
     try { google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
-    S.token = null; sset(SS_TOKEN, null); store(LS.user, null); store(LS.links, null); S.user = null; S.links = null; S.ov = null; S.cu = null; S.ib = null; S.gen++;
+    S.token = null; sset(SS_TOKEN, null); store(LS.user, null); store(LS.links, null); S.user = null; S.links = null; S.ov = null; S.cu = null; S.ib = null; S.bm = {}; S.gen++;
     renderSignin('Your HQ script turned away ' + email + '. HQ only opens for the account in ALLOWED_EMAIL, signed in to this app’s client ID (HQ_CLIENT_ID).');
   }
 
@@ -578,7 +590,7 @@
     ['Sectors', 'Lines, show lists, your turn'],
     ['Phone', 'Polish for your phone']
   ];
-  var DONE_STEPS = 4;
+  var DONE_STEPS = 5;
 
   // Your turn: what each next action means, in the order they're shown. First emails are left for batches (step 3).
   var TURN = [
@@ -650,7 +662,7 @@
         (o.sheetUrl ? '<a class="btn small" href="' + esc(o.sheetUrl) + '" target="_blank" rel="noopener noreferrer">Open the sheet' + I.out + '</a>' : '') + '</div>';
     }
     html += sendingPanel(o) + tilesRow(o);
-    html += '<div class="ov-grid"><div class="ov-main">' + departuresPanel(o) + pipelinePanel(o) + emailsAheadPanel(o) + '</div>' +
+    html += '<div class="ov-grid"><div class="ov-main">' + autopilotPanel(o) + departuresPanel(o) + pipelinePanel(o) + emailsAheadPanel(o) + '</div>' +
       '<div class="ov-side">' + turnPanel(o) + arrivalsPanel(o) + '</div></div>';
     html += buildLine();
     return html;
@@ -676,7 +688,7 @@
       '<div class="send-num"><span class="eyebrow">Sent today</span><span class="big">' + sd.today + '<small>/' + sd.limit + '</small></span>' +
       '<span class="legend"><span><i class="k on"></i>' + sd.today + ' sent</span><span><i class="k"></i>' + spare + ' spare today</span></span></div></div>' +
       '<div class="send-facts"><span class="eyebrow">Sending · last 7 days</span><ul>' + lines.join('') + '</ul>' +
-      '<p class="note" style="margin:0">HQ doesn’t send yet: send each batch from the Showsum menu until autopilot (step 5). Rows outside a batch stay paused.</p></div></section>';
+      '<p class="note" style="margin:0">' + esc(apLine(o.autopilot)) + ' Rows outside a started batch are never emailed.</p></div></section>';
   }
 
   function spark(values, colour) {
@@ -808,12 +820,16 @@
       return '<article class="ticket"><span class="t-top"><span class="round">' + t.count + '</span><span class="t-tag">' + esc(where.toUpperCase()) + '</span></span>' +
         '<b class="t-title">' + esc(t.action) + '</b><span class="t-sub">' + esc(hint(t.action) + late) + '</span></article>';
     })).join('');
-    var due = (o.batches || []).filter(function (b) { return b.dueNow && MENU_HOW[b.stage]; });
+    var ap = o.autopilot || {};
+    var due = (o.batches || []).filter(function (b) { return b.dueNow && MENU_HOW[b.stage] && b.status !== 'Started'; });
     var batchCards = due.map(function (b) {
       return '<article class="ticket"><span class="t-top"><span class="round">' + b.dueNow + '</span><span class="t-tag">BATCH ' + esc(b.id) + ' · ' + esc(b.show.toUpperCase()) + '</span></span>' +
-        '<b class="t-title">Send ' + esc(b.id) + ': ' + esc(STEP_NAME[b.stage]) + '</b><span class="t-sub">In Prospects, filter Batch to ' + esc(b.id) + ' and Stage to ' + esc(b.stageFilter) + ', select the rows, then ' + esc(MENU_HOW[b.stage]) + '.' +
-        (b.pausedWho && b.pausedWho.length ? ' Sort the replies from ' + esc(b.pausedWho.join(', ')) + ' in the Inbox first, or leave them out.' : '') + '</span></article>';
+        '<b class="t-title">Start ' + esc(b.id) + ': ' + esc(STEP_NAME[b.stage]) + '</b><span class="t-sub">' + b.dueNow + (b.dueNow === 1 ? ' is' : ' are') + ' ready. Check who’s in it with Members, then press Start: autopilot sends it in its next window.</span></article>';
     }).join('');
+    if (ap.check === 'Waiting' && ap.mode === 'live') {
+      batchCards = '<article class="ticket"><span class="t-top"><span class="t-tag">AUTOPILOT · YOUR CHECK</span></span><b class="t-title">Check autopilot’s first emails</b>' +
+        '<span class="t-sub">Look at them in Gmail Sent: names, show, link, signature. If they’re right, press Continue on the Autopilot panel.</span></article>' + batchCards;
+    }
     var yours = o.yours && o.yours.count ? '<article class="ticket"><span class="t-top"><span class="round">' + o.yours.count + '</span><span class="t-tag">' + esc(o.yours.shows.map(function (s) { return s.name + (o.yours.shows.length > 1 ? ' ' + s.count : ''); }).join(' · ').toUpperCase()) + '</span></span>' +
       '<b class="t-title">Write to your engaged prospects</b><span class="t-sub">Engaged (they replied, or were hot or warm on your website), so they’re kept out of batches. Their next email is due: write to them yourself.</span></article>' : '';
     var ib = o.inbox || {};
@@ -822,7 +838,7 @@
     else if (ib.waiting) inboxCard = '<a class="ticket" href="#/inbox"><span class="t-top"><span class="round">' + ib.waiting + '</span><span class="t-tag">INBOX</span></span><b class="t-title">Sort ' + esc(plural(ib.waiting, 'reply', 'replies')) + '</b><span class="t-sub">HQ keeps them out of batches until you do. A real reply moves them to Engaged, with Reply to them due today.</span></a>';
     else if (ib.stale) inboxCard = '<a class="ticket" href="#/inbox"><span class="t-top"><span class="t-tag">INBOX</span></span><b class="t-title">The Gmail check has stopped</b><span class="t-sub">It last ran ' + esc(ib.checked ? relDay(ymdOf(new Date(ib.checked))) + ' at ' + clock(ib.checked) : 'a while ago') + '. The Inbox page says what to check.</span></a>';
     cards = inboxCard + batchCards + yours + cards;
-    var count = (o.setup || []).length + items.length + due.length + (yours ? 1 : 0) + (inboxCard ? 1 : 0);
+    var count = (o.setup || []).length + items.length + due.length + (yours ? 1 : 0) + (inboxCard ? 1 : 0) + (ap.check === 'Waiting' && ap.mode === 'live' ? 1 : 0);
     return '<section class="turn" aria-labelledby="turn-h"><div class="turn-head"><h2 id="turn-h">Your turn</h2>' + (count ? '<span class="count">' + count + '</span>' : '') + '</div>' +
       '<p class="sub small" style="margin:0">Next actions due by today in your sheet, grouped. Yellow means it’s waiting on you.</p>' +
       (cards || '<p class="note" style="margin:0">Nothing waiting on you today.</p>') +
@@ -846,7 +862,7 @@
       return '<div class="stop ' + cls + '" title="' + esc(s[1]) + '"><span class="st"></span><small>STEP ' + (i + 1) + '</small><span class="t">' + esc(s[0]) + '</span></div>';
     }).join('');
     return '<section class="panel" aria-labelledby="ov-line"><div class="panel-head"><div><span class="eyebrow">Build</span><h2 class="h3" id="ov-line">The HQ line</h2>' +
-      '<span class="sub small">Each stop is one release. Next: autopilot, sending batches by your show dates.</span></div></div>' +
+      '<span class="sub small">Each stop is one release. Next: exhibitors in HQ, Go for new shows and the fast lane.</span></div></div>' +
       '<div class="line-track" role="list">' + stops + '</div></section>';
   }
 
@@ -872,7 +888,11 @@
     var name = STEP_NAME[b.stage];
     if (b.dueNow) {
       var t = b.dueNow + ' ready for ' + name;
-      if (b.stage === 'first' && b.closes) t += dayDiff(b.closes) >= 0 ? ' · window open until ' + fmtDay(b.closes) : ' · window closed ' + fmtDay(b.closes) + ': the menu still sends until the show starts';
+      if (b.stage === 'first' && b.closes) {
+        if (dayDiff(b.closes) >= 0) t += ' · window open until ' + fmtDay(b.closes);
+        else if (b.starts && dayDiff(b.starts) > 0) t += ' · window closed ' + fmtDay(b.closes) + ': autopilot still sends until ' + fmtDay(ymdOf(new Date(ymdDate(b.starts).getTime() - 864e5))) + ', the day before the show';
+        else t += ' · the show has started: no more first emails (Season planning after it ends)';
+      }
       return t;
     }
     return name + ' from ' + fmtDay(b.nextDue);
@@ -895,15 +915,24 @@
       if (c.paused) extra.push(c.paused + ' replied: sort in the Inbox');
       if (c.yours - (c.paused || 0) > 0) extra.push((c.yours - (c.paused || 0)) + ' engaged: yours');
       if (c.out) extra.push(c.out + ' out (opted out, bounced or can’t email)');
-      return '<article class="dep" style="--lc:' + lineVar(b.line) + '">' +
+      var started = b.status === 'Started', paused = b.status === 'Paused';
+      var queued = (o.autopilot && o.autopilot.byBatch && o.autopilot.byBatch[b.id]) || 0;
+      var apNote = started ? (queued ? 'Autopilot: ' + plural(queued, 'email') + ' due now, in board order' + (o.autopilot.mode === 'off' ? ', once autopilot is on' : '') + '.' : b.stage === 'done' ? 'Autopilot: nothing more to send.' : 'Autopilot: nothing due today' + (b.nextDue ? '; next from ' + fmtDay(b.nextDue) : '') + '.')
+        : paused ? 'Paused: autopilot sends nothing to it until you press Start.' : 'Not started: check who’s in it with Members, then press Start.';
+      var open = !!S.bmOpen[b.id];
+      return '<article class="dep' + (started ? ' started' : '') + '" style="--lc:' + lineVar(b.line) + '">' +
         '<span class="dep-pos mono">' + b.position + '</span>' +
-        '<div class="dep-main"><div class="dep-head"><span class="dep-name">' + lineDot(b.line, b.sector) + '<b>' + esc(b.id) + ' · ' + esc(b.show) + '</b></span>' +
+        '<div class="dep-main"><div class="dep-head"><span class="dep-name">' + lineDot(b.line, b.sector) + '<b>' + esc(b.id) + ' · ' + esc(b.show) + '</b>' +
+        '<span class="chip ' + (started ? 'live' : paused ? 'warn' : 'dim') + '">' + esc(started ? 'Started' : paused ? 'Paused' : 'Not started') + '</span></span>' +
         '<span class="chip' + (b.dueNow ? ' warn' : b.stage === 'done' ? ' dim' : '') + '">' + esc(STEP_NAME[b.stage]) + '</span></div>' +
         stageTrack(b) +
         '<span class="sub small">' + esc(batchStatus(b)) + '</span>' +
         '<span class="muted small">' + esc(plural(b.members, 'prospect') + ' · started at ' + b.startStep + (b.sent.first ? ' · ' + b.sent.first + ' first emails sent' : '') + (b.sent.day2 ? ', ' + b.sent.day2 + ' Day 2' : '') + (b.sent.last ? ', ' + b.sent.last + ' Last touch' : '') + (extra.length ? ' · ' + extra.join(', ') : '')) + '</span>' +
-        (b.dueNow && MENU_HOW[b.stage] ? '<p class="how small">To send: in Prospects, filter <b>Batch</b> to <b>' + esc(b.id) + '</b> and <b>Stage</b> to <b>' + esc(b.stageFilter) + '</b>, select the rows, then ' + esc(MENU_HOW[b.stage]) + '. The menu skips opted-out, bounced and already-sent rows.' +
-          (b.pausedWho && b.pausedWho.length ? ' <b>Leave out ' + esc(b.pausedWho.join(', ')) + (c.paused > b.pausedWho.length ? ' and ' + (c.paused - b.pausedWho.length) + ' more' : '') + '</b>: they replied, and the menu doesn’t know. Better: sort them in the Inbox first.' : '') + '</p>' : '') +
+        '<p class="how small">' + esc(apNote) + '</p>' +
+        '<div class="dep-acts">' +
+        (started ? '<button class="btn small" data-bpause="' + esc(b.id) + '">Pause</button>' : b.stage !== 'done' ? '<button class="btn small yellow" data-bstart="' + esc(b.id) + '">Start</button>' : '') +
+        '<button class="btn small ghost" data-bmembers="' + esc(b.id) + '" aria-expanded="' + open + '">' + (open ? 'Hide members' : 'Members') + '</button></div>' +
+        (open ? membersBlock(b.id) : '') +
         '</div><div class="dep-tools">' +
         '<button class="icon-btn" data-bmove="up" data-id="' + esc(b.id) + '" aria-label="Move ' + esc(b.id) + ' up"' + (i === 0 ? ' disabled' : '') + '>' + I.up + '</button>' +
         '<button class="icon-btn" data-bmove="down" data-id="' + esc(b.id) + '" aria-label="Move ' + esc(b.id) + ' down"' + (i === bs.length - 1 ? ' disabled' : '') + '>' + I.down + '</button>' +
@@ -917,10 +946,10 @@
       return '<div class="prop">' + lineDot(p.line, p.sector) + '<span class="prop-tx"><b>' + esc(p.show) + ' · ' + esc(p.stepLabel) + '</b><span class="muted small">' + esc(plural(p.count, 'prospect') + (when ? ' · ' + when : '')) + '</span></span>' +
         '<button class="btn small" data-make="' + esc(p.showId) + '" data-step="' + esc(p.step) + '" data-count="' + p.count + '" data-label="' + esc(p.show + ' · ' + p.stepLabel) + '">' + I.plus + 'Make batch</button></div>';
     }).join('');
-    return '<section class="panel" aria-labelledby="dep-h"><div class="panel-head"><div><span class="eyebrow">Batches · set up only</span><h2 class="h2" id="dep-h">Departures</h2>' +
-      '<span class="sub small">A batch is a group from one show that goes through first email, Day 2 and Last touch together. The order is who goes first once autopilot runs (step 5); until then, send from the Showsum menu.</span></div>' +
+    return '<section class="panel" aria-labelledby="dep-h"><div class="panel-head"><div><span class="eyebrow">Batches</span><h2 class="h2" id="dep-h">Departures</h2>' +
+      '<span class="sub small">A batch is a group from one show that goes through first email, Day 2 and Last touch together. Autopilot sends started batches, top first.</span></div>' +
       (o.prospectsUrl ? '<a class="btn small" href="' + esc(o.prospectsUrl) + '" target="_blank" rel="noopener noreferrer">Open Prospects' + I.out + '</a>' : '') + '</div>' +
-      (rows ? '<div class="deps">' + rows + '</div>' : '<p class="note" style="margin:0">No batches yet. Make one from the groups below: nothing is sent, and you can remove it again.</p>') +
+      (rows ? '<div class="deps">' + rows + '</div>' : '<p class="note" style="margin:0">No batches yet. Make one from the groups below: nothing is sent until you start it.</p>') +
       (props ? '<div class="props"><span class="eyebrow">Ready to batch</span>' + props + '</div>' : '') + '</section>';
   }
 
@@ -928,9 +957,44 @@
     var main = $('#main');
     main.onclick = function (ev) {
       var mk = ev.target.closest('[data-make]'), mv = ev.target.closest('[data-bmove]'), rm = ev.target.closest('[data-bremove]');
-      if (mk) {
+      var st = ev.target.closest('[data-bstart]'), pa = ev.target.closest('[data-bpause]'), mb = ev.target.closest('[data-bmembers]'), dr = ev.target.closest('[data-drop]');
+      var am = ev.target.closest('[data-apmode]'), ad = ev.target.closest('[data-apdry]'), ac = ev.target.closest('[data-apcontinue]');
+      if (st) {
+        var live = S.ov && S.ov.autopilot && S.ov.autopilot.mode === 'live';
+        if (!window.confirm('Start ' + st.dataset.bstart + '?\n\n' + (live ? 'Autopilot is Live: it emails this batch in its next window (weekdays 08:30–11:30), top batches first.' : 'Autopilot sends it once it’s on (Dry run first shows exactly what it would send).') + ' You can pause it any time.')) return;
+        batchCall(st, 'startBatch', { id: st.dataset.bstart }, function (j) { return 'Started ' + j.batch.id; });
+      } else if (pa) {
+        batchCall(pa, 'pauseBatch', { id: pa.dataset.bpause }, function (j) { return 'Paused ' + j.batch.id + ': autopilot won’t send to it'; }, true);
+      } else if (mb) {
+        var id = mb.dataset.bmembers;
+        S.bmOpen[id] = !S.bmOpen[id];
+        renderRoute();
+        if (S.bmOpen[id]) fetchMembers(id);
+      } else if (dr) {
+        if (!window.confirm('Take ' + dr.dataset.who + ' out of ' + dr.dataset.drop + '?\n\nTheir Batch cell in Prospects is cleared, so autopilot won’t email them with this batch. They go back to Ready to batch.')) return;
+        if (S.busy.batch) { toast('One moment: HQ is still saving your last change.'); return; }
+        S.busy.batch = true; dr.disabled = true;
+        var bid = dr.dataset.drop, gen = S.gen;
+        call('dropMember', { id: bid, code: dr.dataset.code }, { timeout: 120000 }).then(function (j) {
+          S.busy.batch = false;
+          if (gen !== S.gen) return;
+          S.bm[bid] = { at: Date.now(), data: j };
+          if (j.overview) { S.ov = j.overview; S.ovAt = Date.now(); }
+          if (S.route === 'overview') renderRoute();
+          toast('Taken out of ' + bid);
+        }, function (e) { S.busy.batch = false; dr.disabled = false; toast(e.kind === 'signin' ? 'Sign in again, then try once more.' : e.message, true); });
+      } else if (am) {
+        var mode = am.dataset.apmode;
+        if (mode === 'live' && !window.confirm('Switch autopilot to Live?\n\nIn each sending window (weekdays 08:30–11:30) it emails the batches you’ve started, top first, within the day’s limit. The first run sends 5, then waits for you to check them in Gmail Sent and press Continue.')) return;
+        batchCall(am, 'setAutopilot', { mode: mode }, function () { return mode === 'live' ? 'Autopilot is Live' : mode === 'dry' ? 'Autopilot is on Dry run: it sends nothing' : 'Autopilot is off'; }, mode === 'off');
+      } else if (ad) {
+        batchCall(ad, 'autopilotDryRun', {}, function () { return 'Dry run asked for: results within 10 minutes, nothing is sent'; });
+      } else if (ac) {
+        if (!window.confirm('Have you checked the first emails in Gmail Sent?\n\nIf they look right, autopilot carries on with the rest in this window.')) return;
+        batchCall(ac, 'autopilotContinue', {}, function () { return 'Autopilot carries on'; });
+      } else if (mk) {
         var n = Number(mk.dataset.count);
-        if (!window.confirm('Make a batch of ' + plural(n, 'prospect') + ': ' + mk.dataset.label + '?\n\nHQ writes the batch ID in their Batch column in Prospects and adds it to the Batches tab. Nothing is sent, and you can remove it again.')) return;
+        if (!window.confirm('Make a batch of ' + plural(n, 'prospect') + ': ' + mk.dataset.label + '?\n\nHQ writes the batch ID in their Batch column in Prospects and adds it to the Batches tab. Nothing is sent until you start it.')) return;
         batchCall(mk, 'makeBatch', { showId: mk.dataset.make, step: mk.dataset.step }, function (j) { return 'Made ' + j.made.label + ' (' + plural(j.made.size, 'prospect') + ')'; });
       } else if (mv) {
         batchCall(mv, 'moveBatch', { id: mv.dataset.id, dir: mv.dataset.bmove }, function () { return 'Order saved'; });
@@ -941,17 +1005,22 @@
     };
   }
 
-  function batchCall(btn, action, data, done) {
-    if (S.busy.batch) return;
-    S.busy.batch = true;
+  // Switching autopilot off and pausing a batch always go straight through, even while another change is saving.
+  function batchCall(btn, action, data, done, urgent) {
+    if (S.busy.batch && !urgent) { toast('One moment: HQ is still saving your last change.'); return; }
+    if (!urgent) S.busy.batch = true;
+    if (urgent) S.ctrl++;
     btn.disabled = true;
-    call(action, data, { timeout: 120000 }).then(function (j) {
-      S.busy.batch = false;
+    var gen = S.gen;
+    call(action, data, { timeout: 120000, guard: !urgent }).then(function (j) {
+      if (!urgent) S.busy.batch = false;
+      if (gen !== S.gen) return;
+      Object.keys(S.bmOpen).forEach(function (id) { if (S.bmOpen[id]) fetchMembers(id, true); });
       if (j.overview) { S.ov = j.overview; S.ovAt = Date.now(); }
       if (S.route === 'overview') renderRoute();
       toast(done(j));
     }, function (e) {
-      S.busy.batch = false;
+      if (!urgent) S.busy.batch = false;
       btn.disabled = false;
       toast(e.kind === 'signin' ? 'Sign in again, then try once more.' : e.message, true);
     });
@@ -967,6 +1036,114 @@
     return head('ARRIVES IN STEP ' + p[1], p[0], esc(p[2]) + '.') +
       '<section class="panel"><span class="tag">STEP ' + p[1] + '</span><div class="soon"><ul>' +
       p[3].map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div></section>';
+  }
+
+  // ------------------------------------------------------------------------------------------------ Autopilot (release 5)
+  function apLine(ap) {
+    if (!ap || !ap.installed) return 'Autopilot isn’t set up in the pipeline yet.';
+    if (ap.mode === 'live') return 'Autopilot is Live: it sends started batches on weekdays, 08:30 to 11:30.';
+    if (ap.mode === 'dry') return 'Autopilot is on Dry run: it works out what it would send each morning, and sends nothing.';
+    return 'Autopilot is off: nothing is sent.';
+  }
+  function apWhen(w) {
+    if (!w) return '';
+    if (w.open) return 'Sending window open now, until 11:30.';
+    if (!w.next) return '';
+    var d = dayDiff(w.next);
+    return 'Next sending window: ' + (d === 0 ? 'today' : d === 1 ? 'tomorrow' : fmtDay(w.next)) + ', 08:30 to 11:30.';
+  }
+
+  function autopilotPanel(o) {
+    var ap = o.autopilot;
+    if (!ap) return '';
+    if (!ap.installed) {
+      return '<section class="panel ap" aria-labelledby="ap-h"><div class="panel-head"><div><span class="eyebrow">Autopilot · one-time set-up</span><h2 class="h2" id="ap-h">Turn on autopilot</h2>' +
+        '<span class="sub small">Autopilot is a file in the pipeline’s Apps Script, like HQInbox. It sends with the pipeline’s own templates, Gmail alias and limits.</span></div></div>' +
+        '<ol class="steps-n"><li>Open the Showsum Pipeline sheet, then <b>Extensions → Apps Script</b>.</li>' +
+        '<li>Next to <b>Files</b>, press <b>+ → Script</b> and name it <b>HQAutopilot</b>. Paste in <b>HQAutopilot.gs</b> from this release, then save.</li>' +
+        '<li>Choose <b>hqAutopilotSetUp</b> in the function list and press <b>Run</b>. Autopilot starts <b>Off</b>.</li>' +
+        '<li>Come back here and press <b>Refresh</b>.</li></ol></section>';
+    }
+    var modes = [['off', 'Off'], ['dry', 'Dry run'], ['live', 'Live']].map(function (m) {
+      return '<button class="seg' + (ap.mode === m[0] ? ' on seg-' + m[0] : '') + '" data-apmode="' + m[0] + '" aria-pressed="' + (ap.mode === m[0]) + '"' + (ap.mode === m[0] ? ' disabled' : '') + '>' + m[1] + '</button>';
+    }).join('');
+    var head = '<div class="panel-head"><div><span class="eyebrow">Autopilot</span><h2 class="h2" id="ap-h">' +
+      (ap.mode === 'live' ? 'Autopilot is Live' : ap.mode === 'dry' ? 'Autopilot: dry run' : 'Autopilot is off') + '</h2>' +
+      '<span class="sub small">' + esc(apWhen(ap.window)) + ' Today ' + ap.sentToday + ' of ' + ap.limit + ' sent.</span></div>' +
+      '<div class="segs" role="group" aria-label="Autopilot">' + modes + '</div></div>';
+    var warn = '';
+    if (!ap.ticking) warn = '<p class="banner" style="margin:0" role="alert"><span class="grow">The pipeline hasn’t looked in ' + (ap.lastTick ? 'since ' + esc(timeLabel(ap.lastTick)) + ' ' + esc(clock(ap.lastTick)) : 'yet') + '. In its Apps Script, check the hqAutopilotTick trigger is there (Triggers), or run hqAutopilotSetUp again.</span></p>';
+    var check = '';
+    if (ap.mode === 'off' && / · Stopped: /.test(ap.lastRun || '')) {
+      check = '<p class="banner" style="margin:0" role="alert"><span class="grow"><b>Autopilot switched itself off.</b> ' + esc(ap.lastRun.split(' · Stopped: ')[1] || '') + '</span></p>';
+    } else if (ap.mode === 'live' && ap.check === 'Waiting') {
+      check = '<div class="ap-check"><b>Your check: the first emails have gone.</b><span>Look at them in Gmail Sent: their names, the show, the link and your signature. If they’re right, Continue. If not, switch autopilot Off and tell me what’s wrong.</span>' +
+        '<div class="msg-acts"><button class="btn small yellow" data-apcontinue="1">They look right: Continue</button><button class="btn small" data-apmode="off">Switch off</button></div></div>';
+    } else if (ap.mode === 'live' && ap.check === 'Pending') {
+      check = '<p class="note" style="margin:0">The first live run sends ' + 5 + ', then waits for your check.</p>';
+    }
+    var tag = function (w) { return w === 'next' ? '<span class="ftag yellow">NEXT RUN</span>' : w === 'today' ? '<span class="ftag sky">LATER TODAY</span>' : '<span class="ftag muted">OVER LIMIT</span>'; };
+    var list = ap.next.slice(0, 12).map(function (x) {
+      return '<div class="arr">' + '<span class="mono muted">' + esc(x.batch) + '</span>' + tag(x.when) +
+        '<span class="arr-tx"><b>' + esc(x.who) + '</b><span>' + esc(x.template + (x.subject ? ' · ' + x.subject : '') + (x.show ? ' · ' + x.show : '')) + '</span></span></div>';
+    }).join('');
+    var nextHead = ap.total
+      ? (ap.mode === 'off' ? 'If it were on, it would send ' : ap.mode === 'dry' ? 'Due now (a dry run sends nothing): ' : 'Due now: ') + plural(ap.total, 'email') + ', ' + Math.min(ap.total, ap.perRun, ap.room) + ' in the next run.'
+      : 'Nothing due now in your started batches.';
+    var runs = {}, order = [];
+    ap.recent.forEach(function (r) { if (!runs[r.run]) { runs[r.run] = { t: r.t, mode: r.mode, rows: [] }; order.push(r.run); } runs[r.run].rows.push(r); });
+    var recent = order.slice(0, 4).map(function (k) {
+      var g = runs[k];
+      var sent = g.rows.filter(function (r) { return /^(Sent|Would send)$/.test(r.result); }).length;
+      var skipped = g.rows.filter(function (r) { return /^(Skipped|Would skip)/.test(r.result); });
+      var failed = g.rows.filter(function (r) { return /^Failed/.test(r.result); }).length;
+      var other = g.rows.filter(function (r) { return !r.batch && r.result; }).map(function (r) { return r.result; });
+      return '<div class="arr"><span class="mono muted">' + esc(timeLabel(g.t)) + '</span><span class="ftag ' + (g.mode === 'Live' ? 'mint' : 'sky') + '">' + esc(g.mode === 'Live' ? 'SENT' : 'DRY RUN') + '</span>' +
+        '<span class="arr-tx"><b>' + esc(g.mode === 'Live' ? plural(sent, 'email') + ' sent' : plural(sent, 'email') + ' would go') + (failed ? ', ' + failed + ' failed' : '') + '</b>' +
+        (skipped.length ? '<span>' + esc((g.mode === 'Live' ? 'Skipped: ' : 'Would skip: ') + skipped.slice(0, 3).map(function (r) { return r.who + ' (' + r.result.replace(/^(Skipped|Would skip): /, '') + ')'; }).join('; ') + (skipped.length > 3 ? '…' : '')) + '</span>' : '') +
+        (other.length ? '<span>' + esc(other.join(' · ')) + '</span>' : '') + '</span></div>';
+    }).join('');
+    return '<section class="panel ap ap-' + ap.mode + '" aria-labelledby="ap-h">' + head + warn + check +
+      (ap.lastRun ? '<p class="sub small" style="margin:0"><b>Last run:</b> ' + esc(ap.lastRun) + '</p>' : '') +
+      '<div class="ap-cols"><div><span class="eyebrow">Next</span><p class="sub small" style="margin:4px 0 0">' + esc(nextHead) + '</p>' +
+      (list ? '<div class="arrs">' + list + '</div>' : '') + (ap.next.length > 12 ? '<p class="note" style="margin:0">and ' + (ap.next.length - 12) + ' more' + (ap.total > ap.next.length ? ' (' + ap.total + ' in all)' : '') + '.</p>' : '') + '</div>' +
+      '<div><span class="eyebrow">Recent runs</span>' + (recent ? '<div class="arrs">' + recent + '</div>' : '<p class="note" style="margin:6px 0 0">No runs in the last 3 days.</p>') + '</div></div>' +
+      '<div class="actions"><button class="btn small" data-apdry="1"' + (ap.dryAsked ? ' disabled' : '') + '>' + (ap.dryAsked ? 'Dry run asked for: within 10 minutes' : 'Dry run now') + '</button>' +
+      '<span class="note">A dry run works out exactly what would go, from the pipeline itself, and sends nothing.</span></div></section>';
+  }
+
+  function fetchMembers(id, quiet) {
+    var cur = S.bm[id];
+    if (cur && cur.busy) return;
+    S.bm[id] = { busy: true, data: cur && cur.data };
+    if (!quiet && S.route === 'overview') renderRoute();
+    var gen = S.gen;
+    call('batchMembers', { id: id }, { timeout: 90000 }).then(function (j) {
+      if (gen !== S.gen) return;
+      S.bm[id] = { at: Date.now(), data: j };
+      if (S.route === 'overview') renderRoute();
+    }, function (e) {
+      if (gen !== S.gen) return;
+      S.bm[id] = { err: e.kind === 'signin' ? 'Sign in again to see the members.' : e.message, data: cur && cur.data };
+      if (S.route === 'overview') renderRoute();
+    });
+  }
+
+  var MEMBER_TONE = { due: 'yellow', waiting: 'sky', paused: 'coral', yours: 'mint', done: 'muted', out: 'muted' };
+  var MEMBER_TAG = { due: 'DUE NOW', waiting: 'WAITING', paused: 'REPLIED', yours: 'ENGAGED', done: 'DONE', out: 'NOT SENT' };
+  function membersBlock(id) {
+    var bm = S.bm[id] || {};
+    if (!bm.data) return '<div class="members">' + (bm.err ? '<p class="error" style="margin:0">' + esc(bm.err) + '</p>' : '<span class="loading"><span class="spinner"></span>Reading the members</span>') + '</div>';
+    var ms = bm.data.members || [];
+    var counts = {};
+    ms.forEach(function (m) { counts[m.state] = (counts[m.state] || 0) + 1; });
+    var line = Object.keys(MEMBER_TAG).filter(function (k) { return counts[k]; }).map(function (k) { return counts[k] + ' ' + MEMBER_TAG[k].toLowerCase(); }).join(' · ');
+    return '<div class="members"><p class="sub small" style="margin:0">' + esc(plural(ms.length, 'member') + (line ? ': ' + line : '')) + '. Take anyone out you don’t want emailed with this batch.</p>' +
+      '<div class="mem-list">' + ms.map(function (m) {
+        return '<div class="mem"><span class="ftag ' + MEMBER_TONE[m.state] + '">' + MEMBER_TAG[m.state] + '</span>' +
+          '<span class="mem-tx"><b>' + esc(m.who) + '</b><span class="muted small">' + esc([m.stand ? 'Stand ' + m.stand : '', m.priority, m.template, m.note].filter(Boolean).join(' · ')) + '</span></span>' +
+          '<button class="btn small ghost" data-drop="' + esc(id) + '" data-code="' + esc(m.code) + '" data-who="' + esc(m.who) + '">Take out</button></div>';
+      }).join('') + '</div>' + (bm.busy ? '<span class="loading"><span class="spinner"></span>Reading again</span>' : '') + '</div>';
   }
 
   // ------------------------------------------------------------------------------------------------ Inbox (release 4)
