@@ -2,7 +2,7 @@
 
 G's private control room for the Showsum outreach engine: one app on desktop and phone that sits over the existing Showsum Pipeline and Exhibitor Leads scripts.
 
-**Release 5:** autopilot. You start batches in HQ; the pipeline's HQAutopilot file emails them on weekday mornings, through the pipeline's own templates, Gmail alias, rules and limits. Dry run first; after each switch to Live, the first run sends 5 and waits for your check. Release 4 brought the Inbox; release 3 batches; release 2 the live Overview and Customers; release 1 the shell, the Google sign-in lock, Launchpad and Settings.
+**Release 6:** one business, not one row. HQ knows when rows across shows are the same business, and autopilot rests a business 30 days before a new show's first email, sends it at most 4 emails a year and never two in a day. Release 5 brought autopilot: you start batches in HQ; the pipeline's HQAutopilot file emails them on weekday mornings, through the pipeline's own templates, Gmail alias, rules and limits. Release 4 brought the Inbox; release 3 batches; release 2 the live Overview and Customers; release 1 the shell, the Google sign-in lock, Launchpad and Settings.
 
 Lives at **https://hq.quick-sheet.com** (GitHub Pages with its own subdomain, so no other app shares its address).
 
@@ -121,10 +121,23 @@ If `Code.gs` changed, also bump `BUILD` in `Code.gs` and `EXPECT_BUILD` in `hq.j
   - **Live:** in each sending window (weekdays 08:30–11:30, London; not bank holidays or 20 Dec – 3 Jan) it sends up to 20 emails a run, every 10 minutes, within the day's limit and the bounce hold from the Send limits tab. After each switch to Live, the first run sends 5 and waits: check them in Gmail Sent and press **Continue**.
 - **What it sends:** each member's next email when it's due: the first email (A for Google Workspace, B otherwise) from 14 days before the show up to the day before it starts; Day 2 two days after the show ends; Last touch 12 days after Day 2; Season planning in the second week of January. Before each email it checks again with the Showsum menu's own skip rules, and never emails anyone opted out, bounced, without "Yes" in Can email, engaged, with a reply waiting in the Inbox, or already sent that email. It sends and records each one exactly as the menu does (Touches note "Autopilot B01").
 - **Safety:** before each live run it checks the Inbox (HQInbox.gs must be in the pipeline project too) and runs the "no thanks" check; if either fails, nothing is sent. Each email's row is read again just before it goes. The Touches line is written straight after each email; if an email that went can't be recorded, autopilot switches itself Off and tells you (Telegram and the Autopilot panel), so nothing is sent twice. Three failed sends in a row also switch it off. Don't send from the Showsum menu while autopilot is Live.
+- **One business, many rows (release 6):** rows are the same business when they share a name (tidied: Ltd, The, UK, spaces and punctuation ignored, "&" and "+" read as "and"), an email address, or the company's own domain: its email domain or its website. Personal mail providers (gmail.com, btinternet.com…) and shared site platforms (Etsy, Facebook, Instagram, Linktree…) never link rows, and nor does a domain used by more than three differently named businesses. For each business, across all its rows and shows:
+  - **Rest days** (30): no first email for a new show, or Season planning, within 30 days of any outreach email to it, whatever the sector. If the rest runs past the show's start, that show's first email is skipped.
+  - **Yearly cap** (4): at most 4 outreach emails in 12 months, follow-ups included. Customer emails and thank-yous don't count.
+  - Never two emails on the same day: the top batch on the board goes first, the other waits.
+  - Nothing more while another of its rows is opted out, a customer, engaged or marked Not now; a reply waiting on any of its rows holds them all.
+  - Change Rest days and Yearly cap on the HQ settings tab (0 turns either off). Autopilot adds the two rows there on its next look.
+  - Members tag anyone also in another batch (ALSO IN B01), and say why someone is resting or not sent.
 - **The plan is HQ's own:** HQAutopilot.gs carries a copy of HQ's planning code, rebuilt with every release, so the preview on the Overview, the dry run and the live sends agree. Paste the new HQAutopilot.gs whenever a release includes it.
 - **To stop at once:** switch it Off in HQ, or delete the `hqAutopilotTick` trigger.
 
 ## Releases
+
+- **6** (2 Nov 2026):
+  - One business across rows and shows: matched by name ("+" = "and"), address, own email domain or website.
+  - Autopilot: 30-day rest before a new show's first email, at most 4 emails a year, never two in a day, nothing while another row is opted out, a customer, engaged or not now; a reply on any row holds them all. Rest days and Yearly cap on the HQ settings tab.
+  - Members: ALSO IN tags; resting notes. Refresh reads open member lists again.
+  - Recent runs count every row of a run (they counted only the latest 60). Your turn's follow-up card leaves out people already in a batch. Before its first look, the Autopilot panel says it comes within 10 minutes of set-up.
 
 - **5** (2 Nov 2026):
   - Autopilot: HQAutopilot.gs for the pipeline (10-minute trigger, sending window, dry run, live sends as the menu sends them, the 5-email check, log tab, Telegram).

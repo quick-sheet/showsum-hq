@@ -513,10 +513,12 @@ a.ticket:hover { transform: translateY(-1px); }
 .mem:first-child { border-top: 0; }
 .mem-tx { display: flex; flex-direction: column; min-width: 0; }
 .mem-tx b { font-weight: 600; overflow-wrap: anywhere; }
+/* Release 6: a business that's in another batch too */
+.mem-tx b .ftag { display: inline-block; vertical-align: 1px; margin-left: 6px; padding: 2px 6px; font-size: 9px; }
 @media (max-width: 760px) {
   .segs { width: 100%; }
   .seg { flex: 1 1 0; }
   .mem { grid-template-columns: minmax(0, 1fr) auto; }
-  .mem .ftag { grid-column: 1 / -1; }
+  .mem > .ftag { grid-column: 1 / -1; }
 }
 .panel-head > .segs { flex-direction: row; align-self: flex-start; }

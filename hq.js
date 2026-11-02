@@ -2,8 +2,8 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 5;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
-  var EXPECT_BUILD = 5;      // the HQ Apps Script release this app expects
+  var APP_VERSION = 6;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
+  var EXPECT_BUILD = 6;      // the HQ Apps Script release this app expects
   var LS = { config: 'hq.config', links: 'hq.links', user: 'hq.user', name: 'hq.name' };
   var SS_TOKEN = 'hq.idToken';
   var GSI_SRC = 'https://accounts.google.com/gsi/client';
@@ -601,8 +601,8 @@
     ['Send thank you', 'Thank-yous for your show chats.'],
     ['Visit at the show', 'You emailed them before a show you’re going to: drop by their stand.'],
     ['Find a working email', 'Their email bounced: find another address.'],
-    ['Follow up after the show', 'Due a follow-up: make a Day 2 batch for them on the Departures board.'],
-    ['Follow up', 'Due a follow-up: make a Day 2 batch for them on the Departures board.'],
+    ['Follow up after the show', 'Due a follow-up no batch will send: make a batch for them on the Departures board, or write to them yourself.'],
+    ['Follow up', 'Due a follow-up no batch will send: make a batch for them on the Departures board, or write to them yourself.'],
     ['Check earlier row', 'Already in the sheet from another show: check the earlier row.'],
     ['Ask before emailing', 'Sole trader or no consent yet: ask before emailing.'],
     ['Find contact details', 'No email address yet.'],
@@ -621,6 +621,8 @@
       S.busy.ov = false;
       if (gen !== S.gen) return;   // signed out meanwhile
       S.ov = j; S.ovErr = ''; S.ovAt = Date.now(); S.offline = false;
+      // Refresh reads open member lists again too
+      if (fresh) Object.keys(S.bmOpen).forEach(function (id) { if (S.bmOpen[id]) fetchMembers(id, true); });
       if (S.route === 'overview') renderRoute();
     }, function (e) {
       S.busy.ov = false;
@@ -1072,7 +1074,9 @@
       '<span class="sub small">' + esc(apWhen(ap.window)) + ' Today ' + ap.sentToday + ' of ' + ap.limit + ' sent.</span></div>' +
       '<div class="segs" role="group" aria-label="Autopilot">' + modes + '</div></div>';
     var warn = '';
-    if (!ap.ticking) warn = '<p class="banner" style="margin:0" role="alert"><span class="grow">The pipeline hasn’t looked in ' + (ap.lastTick ? 'since ' + esc(timeLabel(ap.lastTick)) + ' ' + esc(clock(ap.lastTick)) : 'yet') + '. In its Apps Script, check the hqAutopilotTick trigger is there (Triggers), or run hqAutopilotSetUp again.</span></p>';
+    if (!ap.ticking) warn = ap.lastTick
+      ? '<p class="banner" style="margin:0" role="alert"><span class="grow">The pipeline hasn’t looked in since ' + esc(timeLabel(ap.lastTick)) + ' ' + esc(clock(ap.lastTick)) + '. In its Apps Script, check the hqAutopilotTick trigger is there (Triggers), or run hqAutopilotSetUp again.</span></p>'
+      : '<p class="note" style="margin:0">The pipeline first looks in within 10 minutes of running hqAutopilotSetUp. Refresh after that. If this is still here after 15 minutes, check the hqAutopilotTick trigger is there (Apps Script → Triggers).</p>';
     var check = '';
     if (ap.mode === 'off' && / · Stopped: /.test(ap.lastRun || '')) {
       check = '<p class="banner" style="margin:0" role="alert"><span class="grow"><b>Autopilot switched itself off.</b> ' + esc(ap.lastRun.split(' · Stopped: ')[1] || '') + '</span></p>';
@@ -1090,24 +1094,21 @@
     var nextHead = ap.total
       ? (ap.mode === 'off' ? 'If it were on, it would send ' : ap.mode === 'dry' ? 'Due now (a dry run sends nothing): ' : 'Due now: ') + plural(ap.total, 'email') + ', ' + Math.min(ap.total, ap.perRun, ap.room) + ' in the next run.'
       : 'Nothing due now in your started batches.';
-    var runs = {}, order = [];
-    ap.recent.forEach(function (r) { if (!runs[r.run]) { runs[r.run] = { t: r.t, mode: r.mode, rows: [] }; order.push(r.run); } runs[r.run].rows.push(r); });
-    var recent = order.slice(0, 4).map(function (k) {
-      var g = runs[k];
-      var sent = g.rows.filter(function (r) { return /^(Sent|Would send)$/.test(r.result); }).length;
-      var skipped = g.rows.filter(function (r) { return /^(Skipped|Would skip)/.test(r.result); });
-      var failed = g.rows.filter(function (r) { return /^Failed/.test(r.result); }).length;
-      var other = g.rows.filter(function (r) { return !r.batch && r.result; }).map(function (r) { return r.result; });
-      return '<div class="arr"><span class="mono muted">' + esc(timeLabel(g.t)) + '</span><span class="ftag ' + (g.mode === 'Live' ? 'mint' : 'sky') + '">' + esc(g.mode === 'Live' ? 'SENT' : 'DRY RUN') + '</span>' +
-        '<span class="arr-tx"><b>' + esc(g.mode === 'Live' ? plural(sent, 'email') + ' sent' : plural(sent, 'email') + ' would go') + (failed ? ', ' + failed + ' failed' : '') + '</b>' +
-        (skipped.length ? '<span>' + esc((g.mode === 'Live' ? 'Skipped: ' : 'Would skip: ') + skipped.slice(0, 3).map(function (r) { return r.who + ' (' + r.result.replace(/^(Skipped|Would skip): /, '') + ')'; }).join('; ') + (skipped.length > 3 ? '…' : '')) + '</span>' : '') +
-        (other.length ? '<span>' + esc(other.join(' · ')) + '</span>' : '') + '</span></div>';
+    // Each run is counted on the server from all of its rows (release 6: it used to count only the latest 60)
+    var recent = (ap.runs || []).map(function (g) {
+      var live = g.mode === 'Live';
+      return '<div class="arr"><span class="mono muted">' + esc(timeLabel(g.t)) + '</span><span class="ftag ' + (live ? 'mint' : 'sky') + '">' + esc(live ? 'SENT' : 'DRY RUN') + '</span>' +
+        '<span class="arr-tx"><b>' + esc(live ? plural(g.sent, 'email') + ' sent' : plural(g.sent, 'email') + ' would go') + (g.failed ? ', ' + g.failed + ' failed' : '') + '</b>' +
+        (g.skipped ? '<span>' + esc((live ? 'Skipped ' : 'Would skip ') + g.skipped + ': ' + (g.skips || []).join('; ') + (g.skipped > (g.skips || []).length ? '…' : '')) + '</span>' : '') +
+        ((g.notes || []).length ? '<span>' + esc(g.notes.join(' · ')) + '</span>' : '') + '</span></div>';
     }).join('');
+    var rules = ap.rules ? '<p class="note" style="margin:0">Each business: ' + (ap.rules.rest ? 'rests ' + plural(ap.rules.rest, 'day') + ' after any email before a new show’s first email' : 'no rest between shows') +
+      ', ' + (ap.rules.cap ? 'at most ' + plural(ap.rules.cap, 'email') + ' in 12 months' : 'no yearly limit') + ', never two in a day. Change these on the HQ settings tab (Rest days, Yearly cap).</p>' : '';
     return '<section class="panel ap ap-' + ap.mode + '" aria-labelledby="ap-h">' + head + warn + check +
       (ap.lastRun ? '<p class="sub small" style="margin:0"><b>Last run:</b> ' + esc(ap.lastRun) + '</p>' : '') +
       '<div class="ap-cols"><div><span class="eyebrow">Next</span><p class="sub small" style="margin:4px 0 0">' + esc(nextHead) + '</p>' +
       (list ? '<div class="arrs">' + list + '</div>' : '') + (ap.next.length > 12 ? '<p class="note" style="margin:0">and ' + (ap.next.length - 12) + ' more' + (ap.total > ap.next.length ? ' (' + ap.total + ' in all)' : '') + '.</p>' : '') + '</div>' +
-      '<div><span class="eyebrow">Recent runs</span>' + (recent ? '<div class="arrs">' + recent + '</div>' : '<p class="note" style="margin:6px 0 0">No runs in the last 3 days.</p>') + '</div></div>' +
+      '<div><span class="eyebrow">Recent runs</span>' + (recent ? '<div class="arrs">' + recent + '</div>' : '<p class="note" style="margin:6px 0 0">No runs in the last 3 days.</p>') + '</div></div>' + rules +
       '<div class="actions"><button class="btn small" data-apdry="1"' + (ap.dryAsked ? ' disabled' : '') + '>' + (ap.dryAsked ? 'Dry run asked for: within 10 minutes' : 'Dry run now') + '</button>' +
       '<span class="note">A dry run works out exactly what would go, from the pipeline itself, and sends nothing.</span></div></section>';
   }
@@ -1138,10 +1139,13 @@
     var counts = {};
     ms.forEach(function (m) { counts[m.state] = (counts[m.state] || 0) + 1; });
     var line = Object.keys(MEMBER_TAG).filter(function (k) { return counts[k]; }).map(function (k) { return counts[k] + ' ' + MEMBER_TAG[k].toLowerCase(); }).join(' · ');
-    return '<div class="members"><p class="sub small" style="margin:0">' + esc(plural(ms.length, 'member') + (line ? ': ' + line : '')) + '. Take anyone out you don’t want emailed with this batch.</p>' +
+    var also = ms.filter(function (m) { return (m.also || []).length; }).length;
+    return '<div class="members"><p class="sub small" style="margin:0">' + esc(plural(ms.length, 'member') + (line ? ': ' + line : '') + '.' +
+      (also ? ' ' + (also === 1 ? '1 is' : also + ' are') + ' also in another batch (marked ALSO IN): autopilot sends them one email a day at most, top batch first.' : '')) + ' Take anyone out you don’t want emailed with this batch.</p>' +
       '<div class="mem-list">' + ms.map(function (m) {
         return '<div class="mem"><span class="ftag ' + MEMBER_TONE[m.state] + '">' + MEMBER_TAG[m.state] + '</span>' +
-          '<span class="mem-tx"><b>' + esc(m.who) + '</b><span class="muted small">' + esc([m.stand ? 'Stand ' + m.stand : '', m.priority, m.template, m.note].filter(Boolean).join(' · ')) + '</span></span>' +
+          '<span class="mem-tx"><b>' + esc(m.who) + ((m.also || []).length ? ' <span class="ftag coral" title="This business is in another batch too">ALSO IN ' + esc(m.also.map(function (x) { return x.split(' · ')[0]; }).join(', ')) + '</span>' : '') + '</b>' +
+          '<span class="muted small">' + esc([m.stand ? 'Stand ' + m.stand : '', m.priority, m.template, m.note, (m.also || []).length ? 'Also in ' + m.also.join(', ') : ''].filter(Boolean).join(' · ')) + '</span></span>' +
           '<button class="btn small ghost" data-drop="' + esc(id) + '" data-code="' + esc(m.code) + '" data-who="' + esc(m.who) + '">Take out</button></div>';
       }).join('') + '</div>' + (bm.busy ? '<span class="loading"><span class="spinner"></span>Reading again</span>' : '') + '</div>';
   }
