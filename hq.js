@@ -1,9 +1,9 @@
-/* Showsum HQ · app (release 7: Exhibitors and Go; release 6: one business, not one row; autopilot; Inbox; batches; live Overview and Customers; shell, sign-in, Launchpad, Settings) */
+/* Showsum HQ · app (release 8: Exhibitors as a section of HQ, Sectors folded in; release 7: Exhibitors and Go; release 6: one business, not one row; autopilot; Inbox; batches; live Overview and Customers; shell, sign-in, Launchpad, Settings) */
 (function () {
   'use strict';
 
-  var APP_VERSION = 7;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
-  var EXPECT_BUILD = 7;      // the HQ Apps Script release this app expects
+  var APP_VERSION = 8;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
+  var EXPECT_BUILD = 8;      // the HQ Apps Script release this app expects
   var LS = { config: 'hq.config', links: 'hq.links', user: 'hq.user', name: 'hq.name' };
   var SS_TOKEN = 'hq.idToken';
   var GSI_SRC = 'https://accounts.google.com/gsi/client';
@@ -28,7 +28,6 @@
   }
   var I = {
     overview: svg('<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>'),
-    sectors: svg('<path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/><path d="m2 17.5 10 5 10-5"/>'),
     exhibitors: svg('<path d="M3 21V9l9-6 9 6v12"/><path d="M8 21v-7h8v7"/><path d="M8 17.5h8"/>'),
     inbox: svg('<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13l3.5 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6l3.5-7Z"/>'),
     customers: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c2 .7 3.2 2.4 3.6 5.2"/>'),
@@ -48,11 +47,11 @@
     download: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>')
   };
 
-  // A fourth item is a page of its own (Exhibitors is the Exhibitor Leads app inside HQ), not a route here.
+  // Exhibitors (exhibitors.js) is a section of HQ with pages of its own: #/exhibitors/s/<sector>, /x/<show>, /d/<sector>.
+  // Sectors lives inside it now, each sector a line; an old #/sectors link opens Exhibitors.
   var NAV = [
     ['overview', 'Overview', I.overview],
-    ['exhibitors', 'Exhibitors', I.exhibitors, 'exhibitors/'],
-    ['sectors', 'Sectors', I.sectors],
+    ['exhibitors', 'Exhibitors', I.exhibitors],
     ['inbox', 'Inbox', I.inbox],
     ['customers', 'Customers', I.customers],
     ['launchpad', 'Launchpad', I.launchpad],
@@ -115,9 +114,10 @@
   }
   function uid() { return Math.random().toString(36).slice(2, 12).replace(/[^a-z0-9]/g, 'x').padEnd(10, 'x'); }
 
+  var GONE = 'Signed out.';   // an answer that arrived after you signed out: never worth a message
   function toast(msg, bad, ms) {
     var box = $('#toasts');
-    if (!box) return;
+    if (!box || msg === GONE) return;
     var el = document.createElement('div');
     el.className = 'toast' + (bad ? ' bad' : '');
     el.setAttribute('role', bad ? 'alert' : 'status');
@@ -127,6 +127,21 @@
   }
 
   function HqError(message, kind) { this.message = message; this.kind = kind; }
+
+  // ------------------------------------------------------------------------------------------------ Exhibitors (exhibitors.js)
+  // What Exhibitors may use from here: the two calls (both with your HQ sign-in), the toast, and a redraw. Nothing else.
+  function hqxReset() { if (window.HQX) window.HQX.reset(); }
+  if (window.HQX) window.HQX.init({
+    call: function (action, data, opts) { return call(action, data, opts); },
+    callEl: function (action, data, opts) { return call(action, data, Object.assign({}, opts, { el: true })); },
+    elUrl: function () { return URL_RE.test(S.elUrl || '') ? S.elUrl : ''; },
+    helloDone: function () { return !!S.helloDone; },
+    toast: function (msg, bad, ms) { toast(msg, bad, ms); },
+    isHere: function () { return S.route === 'exhibitors' && !!$('#main') && !!S.token; },
+    signedIn: function () { return !!S.token; },
+    rerender: function () { if (S.route === 'exhibitors') renderRoute(); },
+    helloFailed: function () { return !S.helloDone && !!S.helloErr; }
+  });
 
   // ------------------------------------------------------------------------------------------------ Google sign-in
   function loadGsi() {
@@ -164,6 +179,12 @@
     startApp();
   }
 
+  /** Signed out, turned away or forgotten: anything waiting for a fresh sign-in is dropped, never sent later. */
+  function dropWaiters() {
+    var w = S.waiters; S.waiters = [];
+    w.forEach(function (x) { try { x.reject(new HqError(GONE, 'gone')); } catch (e) { /* already settled */ } });
+  }
+
   /** Get a fresh sign-in without leaving the page. Resolves when a new token arrives. */
   function reauth() {
     return new Promise(function (resolve, reject) {
@@ -195,7 +216,8 @@
   function signOut() {
     var done = function () {
       try { if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
-      S.token = null; S.claims = null; S.user = null; S.links = null; S.status = null; S.ov = null; S.cu = null; S.ib = null; S.bm = {}; S.elUrl = ''; S.gen++;
+      S.token = null; S.claims = null; S.user = null; S.links = null; S.status = null; S.ov = null; S.cu = null; S.ib = null; S.bm = {}; S.elUrl = ''; S.helloDone = false; S.gen++;
+      dropWaiters(); hqxReset();
       sset(SS_TOKEN, null);
       store(LS.user, null); store(LS.links, null);
       renderSignin();
@@ -222,28 +244,35 @@
   // ------------------------------------------------------------------------------------------------ talking to the HQ script
   function call(action, data, opts) {
     opts = opts || {};
-    var ctrl = S.ctrl;
+    var ctrl = S.ctrl, el = !!opts.el, gen0 = S.gen;   // el: Exhibitor Leads' own web app, with the same HQ sign-in
+    if (el && !URL_RE.test(S.elUrl || '')) return Promise.reject(new HqError('Exhibitor Leads isn’t connected: add EL_URL to HQ’s Script Properties.', 'server'));
     var ready = (S.token && tokenOk(S.token, opts.noReauth ? 0 : 60)) ? Promise.resolve() : (opts.noReauth ? Promise.reject(new HqError('signin', 'signin')) : reauth());
     return ready.then(function () {
+      if (gen0 !== S.gen) throw new HqError(GONE, 'gone');   // signed out while it waited for a sign-in: never sent
       var ctl = new AbortController();
       var timer = setTimeout(function () { ctl.abort(); }, opts.timeout || 60000);
       var body = JSON.stringify(Object.assign({ action: action, idToken: S.token }, data || {}));
-      return fetch(S.config.url, { method: 'POST', body: body, signal: ctl.signal, redirect: 'follow', credentials: 'omit' })
+      var who = el ? 'Exhibitor Leads' : 'your HQ script';
+      return fetch(el ? S.elUrl : S.config.url, { method: 'POST', body: body, signal: ctl.signal, redirect: 'follow', credentials: 'omit' })
         .then(function (r) {
           clearTimeout(timer);
           return r.json().catch(function () {
-            throw new HqError('Your HQ script sent something HQ couldn’t read. Check it’s deployed as a web app that Anyone can use.', 'bad');
+            throw new HqError((el ? 'Exhibitor Leads' : 'Your HQ script') + ' sent something HQ couldn’t read. Check it’s deployed as a web app that Anyone can use.', 'bad');
           });
-        }, function () {
+        }, function (e) {
           clearTimeout(timer);
-          throw new HqError(navigator.onLine === false ? 'You’re offline.' : 'Couldn’t reach your HQ script.', 'network');
+          throw new HqError(navigator.onLine === false ? 'You’re offline.' : e && e.name === 'AbortError' ? (el ? 'Exhibitor Leads' : 'Your HQ script') + ' took too long to answer.' : 'Couldn’t reach ' + who + '.', 'network');
         })
         .then(function (j) {
-          if (j && j.build != null) S.build = j.build;
-          if (j && j.error === 'signin') {
+          // Signed out (or turned away) while this was on its way: drop the answer, and never ask to sign in for it
+          if (gen0 !== S.gen) throw new HqError(GONE, 'gone');
+          if (j && j.build != null && !el) S.build = j.build;
+          if (j && (j.error === 'signin' || (el && j.error === 'Unauthorised'))) {
             if (!opts.retried && !opts.noReauth && !tokenOk(S.token, 300)) {
               return reauth().then(function () { return call(action, data, Object.assign({}, opts, { retried: true })); });
             }
+            // A sign-in HQ's script accepts but Exhibitor Leads doesn't: its Script Properties don't match HQ's
+            if (el) throw new HqError('Exhibitor Leads didn’t accept your HQ sign-in. Its Script Properties need HQ_CLIENT_ID, ALLOWED_EMAIL and HQ_SUB, the same as HQ’s.', 'server');
             throw new HqError('signin', 'signin');
           }
           if (j && j.error === 'fresh') {
@@ -303,7 +332,8 @@
     [LS.config, LS.links, LS.user, LS.name].forEach(function (k) { store(k, null); });
     sset(SS_TOKEN, null);
     S.config = null; S.token = null; S.user = null; S.links = null; S.status = null; S.gsi = null; S.pin = '';
-    S.ov = null; S.cu = null; S.ib = null; S.bm = {}; S.hqName = ''; S.gen++;
+    S.ov = null; S.cu = null; S.ib = null; S.bm = {}; S.hqName = ''; S.elUrl = ''; S.helloDone = false; S.gen++;
+    dropWaiters(); hqxReset();
   }
 
   function readConnectLink() {
@@ -329,11 +359,14 @@
       S.offline = false;
       S.user = j.user; store(LS.user, j.user);
       S.hqName = j.hqName || ''; store(LS.name, S.hqName);
-      S.elUrl = URL_RE.test(j.elUrl || '') ? j.elUrl : '';   // memory only: so signing out ends the sign-in there too
+      S.elUrl = URL_RE.test(j.elUrl || '') ? j.elUrl : '';   // memory only: Exhibitors talks to it, and signing out ends the sign-in there too
+      S.helloDone = true; S.helloErr = '';
       S.props = j.props;
       if (!S.editing) { S.links = j.links; store(LS.links, j.links); }
       renderShell(); renderRoute();
     }, function (e) {
+      if (e.kind === 'gone') return;
+      S.helloErr = e.message || 'error';
       if (e.kind === 'signin') return refused();
       if (e.kind === 'network' && (S.links || S.user)) { S.offline = true; setBanner('offline'); renderRoute(); return; }
       setBanner('error:' + e.message);
@@ -404,7 +437,8 @@
     S.refused = true;
     var email = (S.claims && S.claims.email) || 'that account';
     try { google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
-    S.token = null; sset(SS_TOKEN, null); store(LS.user, null); store(LS.links, null); S.user = null; S.links = null; S.ov = null; S.cu = null; S.ib = null; S.bm = {}; S.gen++;
+    S.token = null; sset(SS_TOKEN, null); store(LS.user, null); store(LS.links, null); S.user = null; S.links = null; S.ov = null; S.cu = null; S.ib = null; S.bm = {}; S.elUrl = ''; S.helloDone = false; S.gen++;
+    dropWaiters(); hqxReset();
     renderSignin('Your HQ script turned away ' + email + '. HQ only opens for the account in ALLOWED_EMAIL, signed in to this app’s client ID (HQ_CLIENT_ID).');
   }
 
@@ -498,14 +532,17 @@
   function routeFromHash() {
     var m = /^#\/([a-z]+)/.exec(location.hash || '');
     var r = m && m[1];
-    return NAV.some(function (n) { return n[0] === r && !n[3]; }) ? r : 'overview';
+    if (r === 'sectors') return 'exhibitors';
+    return NAV.some(function (n) { return n[0] === r; }) ? r : 'overview';
   }
 
   function onHash() {
     if (!S.token && !S.user) return;
+    if (window.HQX) window.HQX.leave();   // a form left open belongs to the page you were on
     if (S.editing && !confirmLeave()) { history.replaceState(null, '', '#/launchpad'); return; }
     S.editing = false; S.draft = null;
     S.route = routeFromHash();
+    if (S.route === 'exhibitors' && /^#\/sectors/.test(location.hash)) history.replaceState(null, '', '#/exhibitors');
     renderShell(); renderRoute();
     window.scrollTo(0, 0);
   }
@@ -519,8 +556,8 @@
       ? '<span class="avatar" title="' + esc(S.user.email || '') + '"><img src="' + esc(S.user.picture) + '" alt="" referrerpolicy="no-referrer"></span>'
       : '<span class="avatar" aria-hidden="true">' + esc(callMe().charAt(0).toUpperCase()) + '</span>';
     var navA = function (n, cls) {
-      var cur = S.route === n[0] && !n[3] ? ' aria-current="page"' : '';
-      var href = n[3] || '#/' + n[0];
+      var cur = S.route === n[0] ? ' aria-current="page"' : '';
+      var href = '#/' + n[0];
       return cls === 'rail'
         ? '<a class="nav-a" href="' + href + '" title="' + n[1] + '" aria-label="' + n[1] + '"' + cur + '>' + n[2] + '</a>'
         : '<a href="' + href + '"' + cur + '><span class="ic">' + n[2] + '</span>' + n[1] + '</a>';
@@ -586,14 +623,15 @@
     if (!main) return;
     var html = '';
     if (S.route === 'overview') html = pageOverview();
-    else if (S.route === 'sectors') html = pageSoon('sectors');
+    else if (S.route === 'exhibitors') html = window.HQX ? window.HQX.html(location.hash) : '<p class="error">Exhibitors didn’t load. Reload HQ.</p>';
     else if (S.route === 'inbox') html = pageInbox();
     else if (S.route === 'customers') html = pageCustomers();
     else if (S.route === 'launchpad') html = pageLaunchpad();
     else if (S.route === 'settings') html = pageSettings();
-    main.onclick = null;
+    main.onclick = null; main.onsubmit = null; main.oninput = null; main.onkeydown = null;
     main.innerHTML = bannerHtml() + html;
     document.title = (NAV.filter(function (n) { return n[0] === S.route; })[0] || NAV[0])[1] + ' · Showsum HQ';
+    if (S.route === 'exhibitors' && window.HQX) window.HQX.bind(main);
     bindBanner();
     if (S.route === 'launchpad') bindLaunchpad();
     if (S.route === 'settings') bindSettings();
@@ -654,7 +692,7 @@
     ['Inbox', 'Confirm replies and bounces'],
     ['Autopilot', 'Sends by show dates'],
     ['Exhibitors', 'Shows, exhibitors, checks, Go'],
-    ['Sectors', 'Lines, show lists, your turn'],
+    ['Sector journeys', 'Your turn on each sector line'],
     ['Phone', 'Polish for your phone']
   ];
   var DONE_STEPS = 6;
@@ -693,6 +731,7 @@
       if (S.route === 'overview') renderRoute();
     }, function (e) {
       S.busy.ov = false;
+      if (e.kind === 'gone') return;
       S.ovErr = e.kind === 'signin' ? 'Sign in again to see your pipeline.' : e.message === 'Unknown action' ? 'Your HQ script is still release ' + (S.build || 1) + '. Paste the new Code.gs and deploy a new version to see your pipeline.' : e.message;
       if (e.kind === 'network') S.offline = true;
       if (S.route === 'overview') renderRoute();
@@ -886,7 +925,7 @@
     }).concat(items.map(function (t) {
       var where = t.shows.map(function (s) { return s.name + (t.shows.length > 1 ? ' ' + s.count : ''); }).join(' · ');
       var late = dayDiff(t.oldest) < 0 ? ' Due since ' + fmtDay(t.oldest) + '.' : ' Due today.';
-      var tag = t.action === 'Check Companies House' ? ['a', ' href="exhibitors/"'] : ['article', ''];
+      var tag = t.action === 'Check Companies House' ? ['a', ' href="#/exhibitors"'] : ['article', ''];
       return '<' + tag[0] + ' class="ticket"' + tag[1] + '><span class="t-top"><span class="round">' + t.count + '</span><span class="t-tag">' + esc(where.toUpperCase()) + '</span></span>' +
         '<b class="t-title">' + esc(t.action) + '</b><span class="t-sub">' + esc(hint(t.action) + late) + '</span></' + tag[0] + '>';
     })).join('');
@@ -932,7 +971,7 @@
       return '<div class="stop ' + cls + '" title="' + esc(s[1]) + '"><span class="st"></span><small>STEP ' + (i + 1) + '</small><span class="t">' + esc(s[0]) + '</span></div>';
     }).join('');
     return '<section class="panel" aria-labelledby="ov-line"><div class="panel-head"><div><span class="eyebrow">Build</span><h2 class="h3" id="ov-line">The HQ line</h2>' +
-      '<span class="sub small">Each stop is one release. Next: sector journeys, a line per sector with its show lists and your turn.</span></div></div>' +
+      '<span class="sub small">Each stop is one release. Sectors are lines in Exhibitors now. Next: your turn on each line.</span></div></div>' +
       '<div class="line-track" role="list">' + stops + '</div></section>';
   }
 
@@ -1096,17 +1135,6 @@
     });
   }
 
-  function pageSoon(which) {
-    var p = {
-      sectors: ['Sectors', 7, 'Sector journeys', [
-        'A line per sector, with its shows, your turn steps and how each show is going.',
-        'Shows, exhibitors, Companies House checks and Go are on the Exhibitors page now.']]
-    }[which];
-    return head('ARRIVES IN STEP ' + p[1], p[0], esc(p[2]) + '.') +
-      '<section class="panel"><span class="tag">STEP ' + p[1] + '</span><div class="soon"><ul>' +
-      p[3].map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div></section>';
-  }
-
   // ------------------------------------------------------------------------------------------------ Autopilot (release 5)
   function apLine(ap) {
     if (!ap || !ap.installed) return 'Autopilot isn’t set up in the pipeline yet.';
@@ -1235,6 +1263,7 @@
       if (S.route === 'inbox') renderRoute(); else navBadges();
     }, function (e) {
       S.busy.ib = false;
+      if (e.kind === 'gone') return;
       S.ibErr = e.kind === 'signin' ? 'Sign in again to see your inbox.' : e.message === 'Unknown action' ? 'Your HQ script is still release ' + (S.build || 1) + '. Paste the new Code.gs and deploy a new version to see your inbox.' : e.message;
       if (S.route === 'inbox') renderRoute();
     });
@@ -1382,6 +1411,7 @@
       if (S.route === 'customers') renderRoute();
     }, function (e) {
       S.busy.cu = false;
+      if (e.kind === 'gone') return;
       S.cuErr = e.kind === 'signin' ? 'Sign in again to see your customers.' : e.message === 'Unknown action' ? 'Your HQ script is still release ' + (S.build || 1) + '. Paste the new Code.gs and deploy a new version to see your customers.' : e.message;
       if (S.route === 'customers') renderRoute();
     });
@@ -1718,6 +1748,9 @@
       '<span class="sub small">HQ opens these with your HQ script. Values never leave the script.</span></div>' +
       '<button class="btn small" id="st-recheck">' + I.refresh + 'Check again</button></div>' + dataRows + '</section>';
 
+    // Exhibitor Leads' own settings: checks, notifications, usage (release 8: moved here from its own page)
+    if (window.HQX) html += window.HQX.settingsHtml();
+
     // Script Properties checklist
     var props = (st && st.props) || S.props;
     html += '<section class="panel"><div class="panel-head"><div><span class="eyebrow">Script Properties</span><h2 class="h3">Settings in your HQ script</h2>' +
@@ -1783,6 +1816,7 @@
       }, function (e) { btn.disabled = false; toast(e.kind === 'signin' ? 'Sign in again, then save.' : e.message, true); });
     };
     if (!S.status && !S.statusErr && !S.busy.status) fetchStatus();
+    if (window.HQX) window.HQX.bindSettings($('#xset'));
   }
 
   function fetchStatus() {
@@ -1793,6 +1827,7 @@
       if (S.route === 'settings') renderRoute();
     }, function (e) {
       S.busy.status = false;
+      if (e.kind === 'gone') return;
       S.statusErr = e.kind === 'signin' ? 'Sign in again to check.' : e.message;
       if (S.route === 'settings') renderRoute();
     });

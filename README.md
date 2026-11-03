@@ -2,7 +2,7 @@
 
 G's private control room for the Showsum outreach engine: one app on desktop and phone that sits over the existing Showsum Pipeline and Exhibitor Leads scripts.
 
-**Release 7:** Exhibitors. Everything the Exhibitor Leads app does, inside HQ, with the pipeline's side of each show: Go (the pipeline's own import, straight away), a fast-lane batch of the P1 and P2 ones that you start, and your Companies House calls on "Check" rows. Release 6: one business, not one row. HQ knows when rows across shows are the same business, and autopilot rests a business 30 days before a new show's first email, sends it at most 4 emails a year and never two in a day. Release 5 brought autopilot: you start batches in HQ; the pipeline's HQAutopilot file emails them on weekday mornings, through the pipeline's own templates, Gmail alias, rules and limits. Release 4 brought the Inbox; release 3 batches; release 2 the live Overview and Customers; release 1 the shell, the Google sign-in lock, Launchpad and Settings.
+**Release 8:** Exhibitors is a section of HQ now, in HQ's own shell and look, laid out for a desktop: each sector a line with its shows as the stops, an exhibition table per sector, and a show page with the exhibitor open beside the list. Sectors is folded in, and Exhibitor Leads' own settings are on HQ's Settings page. Release 7: Exhibitors. Everything the Exhibitor Leads app does, inside HQ, with the pipeline's side of each show: Go (the pipeline's own import, straight away), a fast-lane batch of the P1 and P2 ones that you start, and your Companies House calls on "Check" rows. Release 6: one business, not one row. HQ knows when rows across shows are the same business, and autopilot rests a business 30 days before a new show's first email, sends it at most 4 emails a year and never two in a day. Release 5 brought autopilot: you start batches in HQ; the pipeline's HQAutopilot file emails them on weekday mornings, through the pipeline's own templates, Gmail alias, rules and limits. Release 4 brought the Inbox; release 3 batches; release 2 the live Overview and Customers; release 1 the shell, the Google sign-in lock, Launchpad and Settings.
 
 Lives at **https://hq.quick-sheet.com** (GitHub Pages with its own subdomain, so no other app shares its address).
 
@@ -19,8 +19,8 @@ HQ script (apps-script/Code.gs, a standalone Apps Script web app)
    │   take someone out); the Inbox row you sort, and for a real reply or an opt-out that prospect's Stage, Next action,
    │   its date, Notes, and a Touches line; the HQ settings tab (autopilot Off / Dry run / Live, dry run, your check)
    └── Launchpad links and settings live in its Script Properties
-HQ Exhibitors page (exhibitors/) ──► Exhibitor Leads web app directly, with the same sign-in (its release 19 checks it
-   │                                   as HQ does); its address comes from HQ (EL_URL), only after you sign in
+HQ Exhibitors (exhibitors.js) ──► Exhibitor Leads web app directly, with the same sign-in (its release 19 checks it
+   │                                as HQ does); its address comes from HQ (EL_URL), only after you sign in
    └──► HQ script: the pipeline's side of each show; Go and your Companies House calls, which HQ's script passes to
         the pipeline web app (PIPELINE_URL, SHEET_SECRET); the fast-lane batch, made like any other batch
 
@@ -29,7 +29,7 @@ Pipeline script + HQInbox.gs + HQAutopilot.gs (apps-script/pipeline/, pasted int
    └── HQAutopilot, every 10 minutes: sends started batches on weekdays 08:30–11:30 (or a dry run), logs to the Autopilot tab.
 ```
 
-- The pipeline sheet stays the master record. HQ adds a few tabs of its own in later releases (Batches, Inbox, Sectors, Show list, HQ settings).
+- The pipeline sheet stays the master record. HQ adds a few tabs of its own (Batches, Inbox, HQ settings).
 - The pipeline script keeps doing all sending, with its Gmail alias, templates and limits.
 
 ## Security
@@ -80,7 +80,7 @@ HQ shows both lines the first time you connect. On a Mac, you can also work out 
 | PIPELINE_SHEET_ID, LEADS_SHEET_ID, POS_DB_ID | The three sheets (the code between `/d/` and `/edit` in each address) | Release 2 |
 | PIPELINE_URL, SHEET_SECRET | The pipeline web app address and its secret | Release 3 |
 | TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID | Same as the pipeline's | Release 4 |
-| EL_URL | Exhibitor Leads web app address (ending /exec): the Exhibitors page talks to it | Release 7 |
+| EL_URL | Exhibitor Leads web app address (ending /exec): Exhibitors talks to it | Release 7 |
 | HQ_NAME, HQ_NOT_CUSTOMERS_… | Saved by HQ itself (Settings → What HQ calls you; Customers → Not a customer). No need to touch them | Release 2 |
 
 ## Releasing
@@ -97,7 +97,8 @@ If `Code.gs` changed, also bump `BUILD` in `Code.gs` and `EXPECT_BUILD` in `hq.j
 
 ## Exhibitors
 
-- **The page:** Exhibitors in the nav opens `exhibitors/`, the Exhibitor Leads app inside HQ: sectors, the show diary, shows, loading or pasting lists, the checks, Why this result?, Find on Companies House, rechecks, the organiser contact, CSV and notifications.
+- **The section** (release 8): Exhibitors in the nav, with pages of its own: `#/exhibitors` (your sectors as lines, your calls, checks, how a show gets in), `#/exhibitors/s/<sector>` (its exhibitions in a table, with Go, the reach bars, the show diary and its listings and searches), `#/exhibitors/x/<show>` (the show: exhibitors, pipeline and organiser across the top; the list with filters; the exhibitor open on the right, or full screen on a phone) and `#/exhibitors/d/<sector>` (the show diary). Everything Exhibitor Leads did is here: adding a show by its website or a pasted list, the checks, Why this result?, Find on Companies House, company numbers, rechecks, the organiser contact, saved search pages, renaming a sector, CSV, and notifications (on HQ's Settings page). All of it is held in memory only, never saved on the device.
+- **The old address** `exhibitors/` only forwards into HQ: a page shared to HQ opens Add exhibition, and a notification's link opens that exhibition. Old Sectors links open Exhibitors.
 - **In the pipeline**, on each show: how many are in the pipeline, emailed and can email; the ones waiting for your Companies House call; its batches; what's not in the pipeline yet. Each exhibitor carries its priority, stage or "Your call", and its batch.
 - **Go** runs the pipeline's own import for that show, straight away, for the exhibitors already checked (the rest, and any other listing of the same business, wait for the next Go). Going defaults to No for a new show, as in the menu. Then, if ticked, it makes a **fast-lane batch** of the P1 and P2 ones due a first email and not in a batch. Nothing is started: open it on the Departures board, check Members, press Start. Go again any time: it adds only what's new. For rows not yet emailed it also follows Exhibitor Leads, safely: "Check" becomes "Yes (Ltd)" once the company is confirmed, only while the row is New, in no batch and still on Check Companies House (so a Check you set yourself stays); and a business you've decided in Exhibitor Leads isn't an emailable company becomes Consent needed (or Check), emailed or not, whatever its batch, with its rows at other shows. Rows are decided again just before they're written, so a call you make meanwhile stands. One import at a time (Go or the menu's); it never keeps the website waiting.
 - **Your call on "Check" rows:** Yes (Ltd) or Consent needed, from the exhibitor. Yes (Ltd) on a company Exhibitor Leads hasn't confirmed asks first. A Yes (Ltd) row has "Not a limited company? Consent needed". Deciding a company in Exhibitor Leads moves the pipeline row with it: a confirmed company lifts a "Check" row to Yes (Ltd), only before any email; "No, a different one" makes it Consent needed, emailed or not (its follow-up becomes Ask before emailing). One business, not one row: Consent needed or a hold also reaches the same business's rows at other shows (matched as autopilot matches a business; consent they gave stays), each with a note saying why. Each change says what it expects the row to be, and the pipeline changes nothing if the row says otherwise. The home page lists the shows with calls waiting, and Your turn's Check Companies House card opens the page.
