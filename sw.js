@@ -1,17 +1,25 @@
-/* Showsum HQ service worker: keeps the app shell for offline opening. Never caches anything from your scripts. */
-const CACHE = 'showsum-hq-v6';
+/* Showsum HQ service worker: keeps the app shell (and the Exhibitors page's) for offline opening. Never caches anything from your scripts. */
+const CACHE = 'showsum-hq-v7';
 const SHELL = [
   './',
   'index.html',
-  'config.js?v=6',
-  'hq.css?v=6',
-  'hq.js?v=6',
+  'config.js?v=7',
+  'hq.css?v=7',
+  'hq.js?v=7',
   'manifest.webmanifest',
   'icon.svg',
   'icon-192.png',
   'icon-512.png',
   'icon-maskable-512.png',
-  'apple-touch-icon.png'
+  'apple-touch-icon.png',
+  'exhibitors/index.html',
+  'exhibitors/core.js?v=7',
+  'exhibitors/el.js?v=7',
+  'exhibitors/google.png',
+  'exhibitors/microsoft.png',
+  'exhibitors/diary-baby.json',
+  'exhibitors/diary-crafts.json',
+  'exhibitors/diary-christmas.json'
 ];
 
 self.addEventListener('install', (e) => {
@@ -36,7 +44,8 @@ self.addEventListener('fetch', (e) => {
     // The page and config.js: network first, so your edits arrive at once; the saved copy when offline.
     // config.js skips the browser's own 10-minute copy (GitHub Pages sends max-age=600) and asks GitHub each time.
     const nav = req.mode === 'navigate';
-    const key = nav ? 'index.html' : 'config.js?v=6';
+    // each page keeps its own copy: HQ itself, or the Exhibitors page (also opened by a share, with ?url=)
+    const key = nav ? (/\/exhibitors\/(index\.html)?$/.test(url.pathname) ? 'exhibitors/index.html' : 'index.html') : 'config.js?v=7';
     e.respondWith(
       fetch(req, nav ? undefined : { cache: 'no-cache' }).then((res) => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(key, copy)); }

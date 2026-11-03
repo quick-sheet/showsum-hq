@@ -445,12 +445,13 @@ dialog .foot { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wr
   .rail { display: none; }
   .main { padding: 20px 16px calc(96px + var(--safe-b)); gap: 18px; }
   .tabbar {
-    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
     padding: 6px 4px calc(8px + var(--safe-b)); background: rgba(10,11,14,.96); border-top: 1px solid #1d2027;
     backdrop-filter: blur(8px);
   }
   .tabbar a { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0; text-decoration: none; color: var(--muted); font-size: 10.5px; font-weight: 600; position: relative; }
-  .tabbar a span.ic { width: 48px; height: 30px; border-radius: 15px; display: flex; align-items: center; justify-content: center; }
+  .tabbar a span.ic { width: 44px; height: 30px; border-radius: 15px; display: flex; align-items: center; justify-content: center; }
+  .tabbar a { font-size: 10px; letter-spacing: -.01em; white-space: nowrap; min-width: 0; }
   .tabbar a[aria-current="page"] { color: var(--text); }
   .tabbar a[aria-current="page"] span.ic { background: var(--tile); }
   .tabbar svg { width: 20px; height: 20px; }

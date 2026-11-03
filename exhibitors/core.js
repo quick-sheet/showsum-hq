@@ -1,0 +1,923 @@
+/* Exhibitor Leads: the plain logic. No DOM and no network here, so it can be tested with node. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.Core = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const pad = (n) => String(n).padStart(2, '0');
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
+
+  /* ---------- Dates ---------- */
+
+  /** "2026-10-30" to a day number, or NaN. Days are counted in UTC so daylight saving never shifts them. */
+  function dayNum(iso) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    if (!m) return NaN;
+    const y = +m[1], mo = +m[2], d = +m[3], t = Date.UTC(y, mo - 1, d);
+    const back = new Date(t);
+    return back.getUTCFullYear() === y && back.getUTCMonth() === mo - 1 && back.getUTCDate() === d ? t / 864e5 : NaN;
+  }
+
+  /** Today's date on the phone, as "YYYY-MM-DD". */
+  function todayIso(now) {
+    const d = now instanceof Date ? now : new Date(now == null ? Date.now() : now);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  const GROUPS = [
+    { id: 'upcoming', label: 'Upcoming' },
+    { id: 'recent', label: 'Past 12 months' },
+    { id: 'older', label: 'Older' },
+    { id: 'undated', label: 'No date' },
+  ];
+
+  function showGroup(show, today) {
+    const s = dayNum(show && show.start);
+    if (isNaN(s)) return 'undated';
+    let e = dayNum(show.end);
+    if (isNaN(e) || e < s) e = s;
+    const t = dayNum(today);
+    if (e >= t) return 'upcoming';
+    return t - e <= 365 ? 'recent' : 'older';
+  }
+
+  /** Shows split into Upcoming / Past 12 months / Older / No date, each in a sensible order. Empty groups are left out. */
+  function groupShows(shows, today) {
+    const by = { upcoming: [], recent: [], older: [], undated: [] };
+    (shows || []).forEach((s) => by[showGroup(s, today)].push(s));
+    const start = (s) => dayNum(s.start);
+    by.upcoming.sort((a, b) => start(a) - start(b) || String(a.name).localeCompare(b.name));
+    ['recent', 'older'].forEach((k) => by[k].sort((a, b) => start(b) - start(a) || String(a.name).localeCompare(b.name)));
+    by.undated.sort((a, b) => String(a.name).localeCompare(b.name));
+    return GROUPS.filter((g) => by[g.id].length).map((g) => ({ id: g.id, label: g.label, shows: by[g.id] }));
+  }
+
+  function fmtDates(start, end) {
+    const a = dayNum(start);
+    if (isNaN(a)) return 'Dates not set';
+    let b = dayNum(end);
+    if (isNaN(b) || b < a) b = a;
+    const da = new Date(a * 864e5), db = new Date(b * 864e5);
+    const ya = da.getUTCFullYear(), yb = db.getUTCFullYear(), ma = da.getUTCMonth(), mb = db.getUTCMonth();
+    const day = (d) => d.getUTCDate();
+    if (a === b) return `${day(da)} ${MONTHS[ma]} ${ya}`;
+    if (ya === yb && ma === mb) return `${day(da)} to ${day(db)} ${MONTHS[mb]} ${yb}`;
+    if (ya === yb) return `${day(da)} ${MONTHS[ma]} to ${day(db)} ${MONTHS[mb]} ${yb}`;
+    return `${day(da)} ${MONTHS[ma]} ${ya} to ${day(db)} ${MONTHS[mb]} ${yb}`;
+  }
+
+  function ago(ms, now) {
+    const m = Math.round(((now == null ? Date.now() : now) - ms) / 60e3);
+    if (m < 2) return 'just now';
+    if (m < 60) return `${m} min ago`;
+    const h = Math.round(m / 60);
+    if (h < 48) return `${h} h ago`;
+    return `${Math.round(h / 24)} days ago`;
+  }
+
+  /* ---------- Rows: status, labels, counts ---------- */
+
+  const STATUS_LABEL = { corporate: 'Can email', check: 'To check', consent: 'Consent needed', pending: 'Checking' };
+
+  function statusOf(row) {
+    if (!row || (row.state !== 'done' && row.state !== 'error')) return 'pending';
+    return row.emailable === 'corporate' ? 'corporate' : row.emailable === 'check' ? 'check' : 'consent';
+  }
+
+  const isGoogle = (row) => !!row && (row.workspace === 'yes' || row.workspace === 'likely');
+  /** Microsoft 365 mailboxes: the second easy way to sign in to an AppSheet app, after Google. */
+  const isMicrosoft = (row) => !!row && !isGoogle(row) && /^Microsoft 365/.test(String(row.mailHost || ''));
+
+  /** The app could not read this business's website (it turned the app away, said no to robots, did not answer, or only some pages opened). */
+  const UNREAD_NOTE = /Site asks automated|Website did not|Could not read (?!the exhibitor)/;
+  const isUnread = (row) => !!row && (row.state === 'done' || row.state === 'error') && UNREAD_NOTE.test(String(row.note || ''));
+
+  /** The same tallies the Apps Script keeps, worked out here so the screen can update while checks run. */
+  function countRows(rows) {
+    const c = { total: 0, done: 0, corporate: 0, consent: 0, check: 0, google: 0, microsoft: 0, pending: 0, likely: 0, unread: 0 };
+    (rows || []).forEach((r) => {
+      c.total++;
+      const st = statusOf(r);
+      if (st === 'pending') { c.pending++; return; }
+      c.done++; c[st]++;
+      if (isGoogle(r)) c.google++;
+      else if (isMicrosoft(r)) c.microsoft++;
+      if (isUnread(r)) c.unread++;
+      if (r.legal === 'likely') c.likely++;
+    });
+    return c;
+  }
+
+  /** Who runs its email, for the Google and Microsoft tiles: 'google', 'microsoft' or ''. */
+  const providerOf = (row) => (isGoogle(row) ? 'google' : isMicrosoft(row) ? 'microsoft' : '');
+
+  function workspaceShort(row) {
+    if (statusOf(row) === 'pending') return '';
+    if (isMicrosoft(row)) return /behind/.test(row.mailHost) ? 'Probably Microsoft' : 'Microsoft';
+    if (row.mailHost === 'Apple iCloud') return 'Apple iCloud';
+    return row.workspace === 'yes' ? 'Google' : row.workspace === 'likely' ? 'Probably Google' : row.workspace === 'no' ? 'Other email' : 'Mail not known';
+  }
+
+  function workspaceLabel(row) {
+    if (statusOf(row) === 'pending') return 'Not checked yet';
+    const host = row.mailHost ? ` (${row.mailHost})` : '';
+    if (row.workspace === 'yes') return 'Uses Google Workspace';
+    if (row.workspace === 'likely') return 'Probably Google Workspace, behind a mail filter';
+    if (isMicrosoft(row)) return /behind/.test(row.mailHost) ? 'Probably Microsoft 365, behind a mail filter' : 'Uses Microsoft 365';
+    if (row.mailHost === 'Apple iCloud') return 'Uses Apple iCloud Mail';
+    if (row.workspace === 'no') return row.mailHost ? `Not Google: ${row.mailHost}` : 'Not Google';
+    return 'Could not tell' + host;
+  }
+
+  /** The parts of a lead's second line, each { text, logo }: "Can email", "Google" (with its tile), "Stand E23". */
+  function rowParts(row) {
+    const st = statusOf(row), bits = [{ text: STATUS_LABEL[st], logo: '' }];
+    if (st !== 'pending') bits.push({ text: workspaceShort(row), logo: providerOf(row) });
+    if (row.stand) bits.push({ text: `Stand ${row.stand}`, logo: '' });
+    return bits;
+  }
+  function rowSub(row) { return rowParts(row).map((b) => b.text).join(', '); }
+
+  const TYPE_LABEL = {
+    ltd: 'Private limited company', plc: 'Public limited company', llp: 'Limited liability partnership',
+    'limited-partnership': 'Limited partnership', 'scottish-partnership': 'Scottish partnership',
+    'private-limited-guarant-nsc': 'Company limited by guarantee', 'private-limited-guarant-nsc-limited-exemption': 'Company limited by guarantee',
+    'private-unlimited': 'Private unlimited company', 'charitable-incorporated-organisation': 'Charity (CIO)',
+    'industrial-and-provident-society': 'Industrial and provident society', 'royal-charter': 'Royal charter body',
+    'registered-society-non-jurisdictional': 'Registered society', 'oversea-company': 'Overseas company',
+  };
+  function companyTypeLabel(type) {
+    if (!type) return '';
+    return TYPE_LABEL[type] || (String(type).replace(/-/g, ' ').replace(/^./, (c) => c.toUpperCase()));
+  }
+
+  function companyUrl(no) {
+    const n = String(no || '').replace(/\s+/g, '').toUpperCase();
+    return /^[A-Z0-9]{8}$/.test(n) ? `https://find-and-update.company-information.service.gov.uk/company/${n}` : '';
+  }
+
+  /** One line on how sure we are about the legal entity. */
+  function legalLabel(row) {
+    const st = statusOf(row);
+    if (st === 'pending') return 'Not checked yet';
+    const co = row.companyName ? `${row.companyName}, ${row.companyNo}` : '';
+    const state = row.companyStatus && row.companyStatus !== 'active' ? `, ${row.companyStatus}` : '';
+    if (row.legal === 'verified') return `Confirmed: ${co}${state}`;
+    if (row.legal === 'likely') return `Likely match: ${co}${state}`;
+    if (row.legal === 'possible') return `Possible match: ${co}${state}`;
+    return 'No company found';
+  }
+
+  /** What the status means, in words. A guide only. */
+  function emailRule(row) {
+    const st = statusOf(row);
+    if (st === 'pending') return 'Still being checked.';
+    if (st === 'corporate') {
+      return 'Confirmed as a limited company or LLP. That makes it a corporate subscriber, so you can email its business address without asking first. Say who you are, make the offer relevant to the business and give a way to opt out.';
+    }
+    if (st === 'check') {
+      if (row.legal === 'verified' && row.companyStatus && row.companyStatus !== 'active') return `Companies House shows this company as ${row.companyStatus}. Look again before emailing.`;
+      if (row.legal === 'verified') return 'Confirmed company, but it is not a limited company or LLP. Treat it as needing consent.';
+      return 'There is a company with a similar name, but it is not confirmed. Confirm it below, or treat this one as needing consent.';
+    }
+    return 'No limited company was confirmed, so this could be a sole trader or a partnership. Get consent before emailing.';
+  }
+
+  function emailKindLabel(kind) {
+    return kind === 'generic' ? 'General address' : kind === 'named' ? 'Named person' : kind === 'freemail' ? 'Personal address' : '';
+  }
+
+  const FILTERS = [
+    { id: 'all', label: 'All' },
+    { id: 'corporate', label: 'Can email' },
+    { id: 'check', label: 'To check' },
+    { id: 'consent', label: 'Consent needed' },
+    { id: 'google', label: 'Google' },
+    { id: 'microsoft', label: 'Microsoft' },
+    { id: 'unread', label: 'Couldn\u2019t read' },
+  ];
+
+  const rank = (r) => ({ corporate: 0, check: 1, consent: 2, pending: 3 }[statusOf(r)] * 3 + (isGoogle(r) ? 0 : isMicrosoft(r) ? 1 : 2));
+
+  /** Filter, search and order. The best prospects (can email, then Google Workspace, then Microsoft 365) come first. */
+  function filterRows(rows, opts) {
+    const f = (opts && opts.filter) || 'all', q = String((opts && opts.q) || '').trim().toLowerCase();
+    let out = (rows || []).filter((r) => {
+      if (f === 'google') return isGoogle(r) && statusOf(r) !== 'pending';   // the same leads the count shows
+      if (f === 'microsoft') return isMicrosoft(r) && statusOf(r) !== 'pending';
+      if (f === 'unread') return isUnread(r);
+      if (f !== 'all' && statusOf(r) !== f) return false;
+      return true;
+    });
+    if (q) out = out.filter((r) => [r.name, r.domain, r.contact, r.email, r.companyName, r.stand, r.category].some((v) => String(v || '').toLowerCase().indexOf(q) >= 0));
+    return out.slice().sort((a, b) => rank(a) - rank(b) || String(a.name).localeCompare(String(b.name), 'en', { sensitivity: 'base' }));
+  }
+
+  function filterCount(c, id) {
+    return id === 'all' ? c.total : c[id] || 0;   // 'unread' is worked out on the phone, so a list not opened yet has none
+  }
+
+  /** The sentence under the exhibition name. */
+  function summary(c, show) {
+    if (!c || !c.total) {
+      if (show && (show.status === 'blocked' || show.status === 'empty' || show.status === 'error') && show.statusNote) return show.statusNote;
+      return 'No exhibitors yet. Load the exhibitor list, or paste it in.';
+    }
+    if (c.pending) {
+      let s = `Checked ${c.done} of ${c.total} exhibitors so far.`;
+      if (c.corporate) s += ` ${c.corporate} can be emailed without asking first.`;
+      return s;
+    }
+    let s = c.corporate ? `${c.corporate} of ${c.total} exhibitors can be emailed without asking first.` : `None of the ${plural(c.total, 'exhibitor')} can be emailed without asking first yet.`;
+    const parts = [];
+    if (c.consent) parts.push(`${c.consent} ${c.consent === 1 ? 'needs' : 'need'} consent`);
+    if (c.check) parts.push(`${c.check} ${c.check === 1 ? 'needs' : 'need'} a quick check`);
+    if (parts.length) s += ` ${parts.join(' and ')}.`;
+    if (c.google) s += ` ${c.google} ${c.google === 1 ? 'uses' : 'use'} Google for email.`;
+    if (c.microsoft) s += ` ${c.microsoft} ${c.microsoft === 1 ? 'uses' : 'use'} Microsoft for email.`;
+    return s;
+  }
+
+  /* ---------- Sectors ---------- */
+
+  const SECTOR_PRESETS = [
+    'Baby and toddler', 'Whisky and spirits', 'Arts and crafts', 'Christmas fairs', 'Food and drink', 'Weddings', 'Gardening and horticulture', 'Pets and animals', 'Health and wellbeing',
+    'Home and interiors', 'Fashion and apparel', 'Jewellery, watches and accessories', 'Beauty and cosmetics', 'Gifts and lifestyle', 'Furniture and furnishings',
+    'Sports and fitness', 'Outdoor and camping', 'Travel and tourism', 'Automotive and motorsport', 'Antiques, vintage and collectables', 'Agriculture and farming',
+    'Technology and electronics', 'Gaming and esports', 'Toys and games', 'Building and construction', 'Hospitality and catering', 'Renewable energy and sustainability',
+    'Boating and marine', 'Publishing and books', 'Education and careers', 'Photography and film', 'Coffee and tea',
+  ];
+
+  function cleanSector(s) {
+    const t = String(s || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+  }
+
+  /** Reuse the spelling of an existing sector, or of a suggested one, when the new one differs only by case. */
+  function matchSector(name, shows) {
+    const n = cleanSector(name);
+    const low = n.toLowerCase();
+    const hit = (shows || []).find((s) => String(s.sector).toLowerCase() === low);
+    if (hit) return hit.sector;
+    return SECTOR_PRESETS.find((p) => p.toLowerCase() === low) || n;
+  }
+
+  /** The sectors to choose from: the suggested ones in order, then any of your own, each with the exhibitions already added. Typing narrows the list. */
+  function sectorOptions(shows, text) {
+    const count = {}, own = {};
+    (shows || []).forEach((s) => {
+      const k = String(s.sector || 'General').toLowerCase();
+      count[k] = (count[k] || 0) + 1;
+      own[k] = own[k] || s.sector || 'General';
+    });
+    const names = SECTOR_PRESETS.slice();
+    Object.keys(own).sort().forEach((k) => { if (!SECTOR_PRESETS.some((p) => p.toLowerCase() === k)) names.push(own[k]); });
+    const q = String(text || '').trim().toLowerCase();
+    return names.filter((n) => !q || n.toLowerCase().indexOf(q) >= 0).map((n) => ({ name: n, shows: count[n.toLowerCase()] || 0 }));
+  }
+
+  /**
+   * What pressing go means for typed text: the sector it names exactly, the one sector it narrows to,
+   * or, when it matches nothing, a sector of your own. Several matches mean "choose one", so nothing is picked.
+   */
+  function resolveSector(text, shows) {
+    const t = cleanSector(text);
+    if (!t) return { sector: '', matches: [] };
+    const all = sectorOptions(shows).map((o) => o.name);
+    const exact = all.find((n) => n.toLowerCase() === t.toLowerCase());
+    if (exact) return { sector: exact, matches: [exact] };
+    const matches = sectorOptions(shows, t).map((o) => o.name);
+    if (matches.length === 1) return { sector: matches[0], matches };
+    if (matches.length) return { sector: '', matches };
+    return { sector: t, matches: [] };
+  }
+
+  function sectorsFrom(shows) {
+    const by = {};
+    (shows || []).forEach((s) => {
+      const k = s.sector || 'General';
+      const o = by[k] = by[k] || { name: k, shows: 0, total: 0, corporate: 0, google: 0, pending: 0 };
+      o.shows++;
+      const c = s.counts || {};
+      o.total += c.total || 0; o.corporate += c.corporate || 0; o.google += c.google || 0; o.pending += c.pending || 0;
+    });
+    return Object.keys(by).sort((a, b) => a.localeCompare(b)).map((k) => by[k]);
+  }
+
+  /** One-tap Google searches, since there is no free search service to call. */
+  function searchLinks(sector, now) {
+    const y = (now instanceof Date ? now : new Date(now == null ? Date.now() : now)).getFullYear();
+    const s = cleanSector(sector).toLowerCase();
+    const mk = (label, q) => ({ label, url: 'https://www.google.com/search?hl=en&gl=uk&q=' + encodeURIComponent(q) });
+    return [
+      mk('Upcoming shows', `${s} exhibition UK ${y} dates tickets`),
+      mk(`Shows in ${y + 1}`, `${s} show UK ${y + 1}`),
+      mk('Past 12 months', `${s} exhibition UK ${y - 1} ${y} exhibitor list`),
+      mk('Exhibitor lists', `${s} exhibition UK exhibitor list`),
+      mk('Trade shows', `${s} trade show UK exhibitors`),
+    ];
+  }
+
+  /* ---------- Finding exhibitions: listings you browse yourself ----------
+   * These sites say in their terms or robots.txt that automated tools may not read them, so the app only opens them for you
+   * (in Chrome, already filtered) and never reads them. The same list as DIRECTORY_HOSTS in the Apps Script, plus Nursery Today and
+   * Mumbler (news and parent guides, not a show's own site), which the app checks itself before asking Apps Script to read a page. */
+  const DIRECTORY_HOSTS = /(^|\.)(10times\.com|exhibitions\.co\.uk|cantonfair\.net|eventseye\.com|neventum\.com|tradefairdates\.com|expocart\.com|luminik\.io|eventslist\.co\.uk|expolume\.com|ntradeshows\.com|tradeshowsguide\.com|google\.[a-z.]+|bing\.com|duckduckgo\.com|eventbrite\.[a-z.]+|allevents\.in|facebook\.com|instagram\.com|nurserytoday\.co\.uk|mumbler\.co\.uk|showdayguide\.co\.uk|ultimatechristmasmarkets\.com|christmascountdown\.co\.uk|actuallylondon\.co\.uk|secretgb\.co\.uk|tradefest\.io|oxfordcompass\.org)$/;
+  const hostOfUrl = (u) => { const m = /^https?:\/\/([^\/?#:@]+)/i.exec(String(u || '').trim()); return m ? m[1].toLowerCase() : ''; };
+  /** A page from a listings or search site: browsed by you, never read by the app. */
+  function isDirectory(url) { const h = hostOfUrl(url); return !!h && DIRECTORY_HOSTS.test(h); }
+  const TENX = '10times', EXCO = 'exhibitions.co.uk';
+  const exCat = (slug, sub) => ({ name: EXCO, sub, url: `https://www.exhibitions.co.uk/event-category/${slug}/`, tile: 'ex' });
+  // Baby sectors: whole words only ("Mumbai", "Kidderminster" and "Parenteral" are not), and a plant nursery is not a baby one.
+  const BABY_WORDS = /^(?!.*\b(plants?|garden\w*|horticult\w*|trees?|shrubs?|seeds?|landscap\w*)\b)(?=.*\b(bab(y|ies)|toddlers?|nurser(y|ies)|maternity|pregnan\w*|parent(s|ing|hood)?|kids?|kidswear|child(ren)?([’']?s)?|childrenswear|infants?|mums?|mothers?|newborns?)\b)/i;
+  // Christmas fairs and markets: whole words. Checked before crafts and baby, so "Christmas craft fairs" gets the Christmas diary.
+  const CHRISTMAS_WORDS = /\b(christmas|xmas|festive|yuletide|advent)\b|\bwinter\s+(fairs?|markets?|wonderland)\b/i;
+  // Listings pages for a sector, chosen by words in its name. 10times category addresses used here were checked to exist.
+  const FINDER = [
+    [CHRISTMAS_WORDS, [
+      { name: 'Showday Guide', sub: 'Markets and Christmas fairs by date', url: 'https://showdayguide.co.uk/markets', tile: 'SG' },
+      { name: 'Ultimate Christmas Markets', sub: 'UK Christmas markets by town', url: 'https://ultimatechristmasmarkets.com/uk/', tile: 'UC' },
+      { name: 'Christmas Countdown', sub: 'Christmas fairs around the UK', url: 'https://christmascountdown.co.uk/christmas-fairs-uk/', tile: 'CC' },
+      { name: 'eventslist', sub: 'Local Christmas markets', url: 'https://eventslist.co.uk/markets/christmas-market', tile: 'el' },
+    ]],
+    [BABY_WORDS, [
+      { name: TENX, sub: 'UK · Baby, Kids & Maternity', url: 'https://10times.com/unitedkingdom/baby-kids/tradeshows', tile: '10x' },
+      { name: 'eventslist', sub: 'Local baby fairs · search “baby fayre”', url: 'https://eventslist.co.uk', tile: 'el' },
+      { name: 'Eventbrite', sub: 'Search “baby fair” or “baby show”', url: 'https://www.eventbrite.co.uk', tile: 'eb' },
+      { name: 'Nursery Today', sub: 'Nursery trade news and show dates', url: 'https://nurserytoday.co.uk', tile: 'NT' },
+      { name: 'Mumbler', sub: 'Local parent guides list baby fairs', url: 'https://www.mumbler.co.uk', tile: 'Mu' },
+    ]],
+    [/\b(craft|arts?\b|quilt|knit|sew|stitch|yarn|wool|hobb|maker|handmade|paint|gift)/i, [{ name: TENX, sub: 'UK · Arts & Crafts', url: 'https://10times.com/unitedkingdom/arts-crafts/tradeshows', tile: '10x' }, exCat('home-lifestyle-leisure', 'Home, lifestyle & leisure')]],
+    [/\b(food|drink|whisk|wine|gin\b|spirit|beer|cider|coffee|bak|hospitality)/i, [exCat('food-drink-hospitality', 'Food, drink & hospitality')]],
+    [/\b(motor|caravan|camper|car\b|cars\b|vehicle|cycl|bike|boat)/i, [exCat('automotive-mobility', 'Automotive & mobility')]],
+    [/\b(fashion|beauty|cloth|retail|jewel)/i, [exCat('fashion-beauty-retail', 'Fashion, beauty & retail')]],
+    [/\b(home|interior|garden|lifestyle|leisure|wedding)/i, [exCat('home-lifestyle-leisure', 'Home, lifestyle & leisure')]],
+    [/\b(tech|digital|software|media)/i, [exCat('technology-media-telecoms', 'Technology, media & telecoms')]],
+    [/\b(health|medical|wellbeing|wellness)/i, [exCat('healthcare-medical-life-sciences', 'Healthcare & life sciences')]],
+  ];
+  const FINDER_ALL = [{ name: TENX, sub: 'UK · All trade shows', url: 'https://10times.com/unitedkingdom/tradeshows', tile: '10x' }, { name: EXCO, sub: 'UK show calendar', url: 'https://www.exhibitions.co.uk/events/', tile: 'ex' }];
+  /** A short tile for a saved page: "10x", "ex", "CBS", or two letters of its site. */
+  function tileFor(url) {
+    const h = hostOfUrl(url).replace(/^www\./, '');
+    if (/(^|\.)10times\.com$/.test(h)) return '10x';
+    if (/exhibitions\.co\.uk$/.test(h)) return 'ex';
+    if (/cantonfair\.net$/.test(h)) return 'CBS';
+    if (/(^|\.)eventslist\.co\.uk$/.test(h)) return 'el';
+    if (/(^|\.)eventbrite\./.test(h)) return 'eb';
+    if (/(^|\.)nurserytoday\.co\.uk$/.test(h)) return 'NT';
+    if (/(^|\.)mumbler\.co\.uk$/.test(h)) return 'Mu';
+    if (/(^|\.)showdayguide\.co\.uk$/.test(h)) return 'SG';
+    if (/(^|\.)ultimatechristmasmarkets\.com$/.test(h)) return 'UC';
+    if (/(^|\.)christmascountdown\.co\.uk$/.test(h)) return 'CC';
+    if (/(^|\.)google\./.test(h)) return 'G';
+    return (h.replace(/[^a-z0-9]/g, '').slice(0, 2) || '··').toUpperCase();
+  }
+  /**
+   * What "Find exhibitions" lists for a sector: listings pages chosen for it, then the all-UK calendars, then the pages you saved
+   * ({ label, url }), each { name, sub, url, tile, mine }. A saved page that repeats a listed one is shown once, as yours.
+   */
+  function finderPages(sector, saved) {
+    const own = [];
+    FINDER.forEach(([re, pages]) => { if (re.test(String(sector || ''))) pages.forEach((p) => { if (!own.some((x) => x.url === p.url)) own.push(p); }); });
+    const mine = [].concat(saved || []).filter((x) => x && validUrl(x.url)).map((x) => ({ name: String(x.label || hostOfUrl(x.url)), sub: hostOfUrl(x.url).replace(/^www\./, ''), url: x.url, tile: tileFor(x.url), mine: true }));
+    const listed = own.concat(FINDER_ALL.filter((p) => !own.some((x) => x.url === p.url))).filter((p) => !mine.some((m) => m.url === p.url));
+    return listed.concat(mine);
+  }
+  /** Google's own search for a place, which opens the Google Maps app where there is one. */
+  function mapsUrl(q) { return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(String(q || '').replace(/\s+/g, ' ').trim()); }
+  /** What a Google search link searches for, from its address: "baby and toddler exhibition UK 2026 dates tickets". */
+  function searchText(url) { const m = /[?&]q=([^&#]*)/.exec(String(url || '')); try { return m ? decodeURIComponent(m[1].replace(/\+/g, ' ')) : ''; } catch (e) { return ''; } }
+
+  /* ---------- Show diary: researched shows for a sector, from a file in the app ---------- */
+
+  // Which diary a sector gets, chosen by words in its name like the listings above. One file per researched sector.
+  // Arts and crafts sectors: whole words, and not martial or performing arts.
+  const CRAFT_WORDS = /^(?!.*\b(martial|performing)\s+arts?\b)(?=.*\b(crafts?|crafting|arts?|artists?|quilt\w*|knit\w*|sew\w*|stitch\w*|yarns?|wool|handmade|hobb(y|ies)|hobbycrafts?|papercraft\w*|cardmaking|scrapbook\w*|embroider\w*|ceramics?|pottery|potters?|haberdash\w*)\b)/i;
+  const DIARIES = [[CHRISTMAS_WORDS, 'diary-christmas.json'], [BABY_WORDS, 'diary-baby.json'], [CRAFT_WORDS, 'diary-crafts.json']];
+  /** The diary file for a sector, or '' when there is none yet. */
+  function diaryFile(sector) { const d = DIARIES.find(([re]) => re.test(String(sector || ''))); return d ? d[1] : ''; }
+
+  const DIARY_TYPES = [
+    { id: 'trade', label: 'Trade', one: 'Trade show' },
+    { id: 'gift', label: 'Gift trade', one: 'Gift trade show' },
+    { id: 'consumer', label: 'Baby shows', one: 'Baby show' },
+    { id: 'local', label: 'Local fairs', one: 'Local fair' },
+    { id: 'pro', label: 'Early years', one: 'Early years & maternity' },
+  ];
+  /** A diary's own kinds of show (a crafts diary has art fairs and craft shows, say), or the baby ones. */
+  function diaryTypes(d) { return d && Array.isArray(d.types) && d.types.length ? d.types.filter((t) => t && t.id && t.label) : DIARY_TYPES; }
+  const DIARY_DATES = {
+    organiser: { label: 'Organiser dates', help: 'Dates from the organiser’s own site or announcement' },
+    listing: { label: 'Listing, check', help: 'Dates from a listing site only, so check with the organiser' },
+    tbc: { label: 'Not out yet', help: 'Runs every year, but the next dates are not announced yet' },
+  };
+  const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  /** "past", "live" (on today) or "future". A show without dates goes by its month; "2027-99" means through 2027. */
+  function diaryPhase(e, today) {
+    const t = dayNum(today), a = dayNum(e && e.start);
+    if (isNaN(a)) {
+      const m = String((e && e.month) || '');
+      return /^\d{4}-\d{2}$/.test(m) && m < String(today).slice(0, 7) ? 'past' : 'future';
+    }
+    let b = dayNum(e.end);
+    if (isNaN(b) || b < a) b = a;
+    return t > b ? 'past' : t >= a ? 'live' : 'future';
+  }
+  /** The month a diary show is filed under ("2026-10"), and its heading ("October 2026", "Through 2027"). */
+  const diaryMonth = (e) => (e.start ? String(e.start).slice(0, 7) : String(e.month || '9999-99'));
+  function monthLabel(key) {
+    const [y, m] = String(key).split('-');
+    return m === '99' ? `Through ${y}` : FULL_MONTHS[+m - 1] ? `${FULL_MONTHS[+m - 1]} ${y}` : 'Dates not set';
+  }
+
+  // A web address reduced to compare: no scheme, no www, no query, no trailing slash, lower case.
+  const sameAddr = (u) => String(validUrl(u) || '').toLowerCase().replace(/^https?:\/\/(www\.)?/, '').replace(/[?#].*$/, '').replace(/\/+$/, '');
+  const plainName = (s) => String(s || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
+  /** Words to search in, or to search for: lower case, accents and punctuation gone ("Potfest in the Pens · Penrith" → "potfest in the pens penrith"). */
+  const plainText = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[’']/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  /** The name a diary show is given when it is added as an exhibition. One not dated yet keeps its year: "… Olympia London 2027". */
+  function diaryName(e) {
+    const n = String(e.full || [e.name, e.edition].filter(Boolean).join(' ')).trim();
+    const y = !e.start && !e.series && /^\d{4}/.test(String(e.month || '')) ? String(e.month).slice(0, 4) : '';
+    return y && n.indexOf(y) < 0 ? `${n} ${y}` : n;
+  }
+
+  /**
+   * The exhibition already added for a diary show, or null. It must be the same edition: dates within ten days of each other, or the
+   * same year for a show not dated yet. Then one of: its exhibitor list link; its website with the same start; or its name, which
+   * counts only when the exhibition has dates (an undated "The Baby Show Olympia London" could be any year's). Exhibitions in `taken`
+   * (ids) already tick an earlier row, so one exhibition never ticks two.
+   */
+  function diaryMatch(e, shows, taken) {
+    if (!e || e.series) return null;
+    const list = sameAddr(e.list), site = sameAddr(e.site), name = plainName(diaryName(e));
+    const a = dayNum(e.start), year = String(e.start || e.month || '').slice(0, 4);
+    for (const s of shows || []) {
+      if (taken && taken.has(s.id)) continue;
+      const b = dayNum(s.start);
+      if (!isNaN(a) && !isNaN(b) && Math.abs(a - b) > 10) continue;
+      if (isNaN(a) && !isNaN(b) && String(s.start).slice(0, 4) !== year) continue;
+      const urls = (s.urls || []).map(sameAddr);
+      if (list && urls.includes(list)) return s;
+      if (site && urls.includes(site) && !isNaN(a) && a === b) return s;
+      if (name && !isNaN(b) && plainName(s.name) === name) return s;
+    }
+    return null;
+  }
+
+  /**
+   * The diary as the screen shows it: shows not yet over, by month, for one type or all, each with { phase, added } (the exhibition
+   * it is already in, if any). Counts per type are of the shows still to come, so a chip never offers an empty list.
+   */
+  function diaryView(diary, opts, today, shows) {
+    const type = (opts && opts.type) || 'all';
+    const live = ((diary && diary.shows) || []).map((e, i) => Object.assign({}, e, { i, phase: diaryPhase(e, today) })).filter((e) => e.phase !== 'past');
+    const counts = { all: live.length };
+    diaryTypes(diary).forEach((t) => { counts[t.id] = live.filter((e) => e.type === t.id).length; });
+    const order = (e) => (e.start || (String(e.month || '9999-99') + '-32'));
+    const picked = live.filter((e) => type === 'all' || e.type === type)
+      .sort((x, y) => (order(x) < order(y) ? -1 : order(x) > order(y) ? 1 : String(x.name).localeCompare(y.name)))
+      .map((e) => e);
+    // matched in date order over all the shows still to come (not just the chosen type), so a tick never moves with the chips
+    const taken = new Set(), byI = {};
+    live.slice().sort((x, y) => (order(x) < order(y) ? -1 : order(x) > order(y) ? 1 : 0)).forEach((e) => {
+      const m = diaryMatch(e, shows, taken);
+      if (m) { taken.add(m.id); byI[e.i] = m; }
+    });
+    picked.forEach((e) => { e.added = byI[e.i] || null; });
+    const groups = [];
+    picked.forEach((e) => {
+      const key = diaryMonth(e);
+      let g = groups[groups.length - 1];
+      if (!g || g.key !== key) groups.push(g = { key, label: monthLabel(key), items: [] });
+      g.items.push(e);
+    });
+    return { groups, counts, total: live.length };
+  }
+
+  /** What Add exhibition starts with for a diary show: its name, sector, dates, venue, and the exhibitor list link or its website. */
+  function diaryPrefill(e, sector) {
+    // the link the app reads: the exhibitor list of a dated show, else its website; never a listings or social page (Facebook, say),
+    // and never last year's list for a show not dated yet
+    const ok = (u) => !!u && !isDirectory(u);
+    const url = e.start && ok(e.list) ? e.list : ok(e.site) ? e.site : '';
+    const p = { name: diaryName(e), sector: sector || '', start: e.start || '', end: e.end || e.start || '', venue: e.venue || '', url };
+    if (!e.start && /^\d{4}/.test(String(e.month || ''))) p.year = String(e.month).slice(0, 4);   // its website may still show this year's show
+    return p;
+  }
+  /** Dates read from a show's website belong to the edition being added only when they fall in its year (no year: any). */
+  function fitsYear(start, year) { return !year || String(start || '').slice(0, 4) === String(year); }
+  /* ---------- Attendance: what a show's visitor numbers are, and how sure they are ----------
+   * Each figure has its year, the number (or none, when only words were published), what it counts, the exact wording, its
+   * source, and a basis: audited or organiser (a count published after the show), claim (a forecast or an "each year" line),
+   * press or listing (someone else's figure). The estimate for the next show is a range with how it was worked out. */
+  const ATT_MARKS = {
+    counted: { label: 'Counted', help: 'A count the organiser published after the show (or an audited one)' },
+    claim: { label: 'Claimed', help: 'A forecast, a yearly marketing figure, or someone else’s number: not a count' },
+    estimate: { label: 'Estimate', help: 'Worked out from the show’s own figures or its exhibitor numbers: a range, not a fact' },
+    none: { label: 'Not published', help: 'The organiser does not publish a figure we could find' },
+  };
+  const attMark = (basis) => (basis === 'audited' || basis === 'organiser' ? 'counted' : 'claim');
+  const commasN = (n) => String(Math.round(+n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  /** "17,534 visitors", "500 buyers", "25,000 expected". */
+  function attFigureText(f) {
+    if (!f || f.number == null || isNaN(+f.number)) return '';
+    return `${commasN(f.number)} ${f.unit || 'visitors'}`.trim();
+  }
+  /** "38,000–42,000 visitors" for an estimate. */
+  function attRangeText(est) { return est && est.low > 0 ? `${commasN(est.low)}–${commasN(est.high)} ${est.unit || 'visitors'}` : ''; }
+  /**
+   * The line a diary row shows, marked by how the figure was got, with the estimate for the next show. The figure is the latest
+   * count from the last three years; else the latest figure of any kind; else a forecast for this year or last. A figure dated
+   * after this year (a brochure for the next show) is used only when there is nothing else. { mark, text, year, next }, or null
+   * when the show was not researched. `today` (YYYY-MM-DD) is for tests.
+   */
+  function attHeadline(att, today) {
+    if (!att) return null;
+    const now = +String(today || '').slice(0, 4) || new Date().getFullYear();
+    const figs = (att.figures || []).filter((f) => f && f.number != null && !isNaN(+f.number));
+    const newest = (list) => list.slice().sort((a, b) => (b.year - a.year) || (attMark(a.basis) === 'counted' ? -1 : 1))[0];
+    const past = figs.filter((f) => !(+f.year > now));
+    const actual = past.filter((f) => f.unit !== 'expected');
+    const pick = newest(actual.filter((f) => attMark(f.basis) === 'counted' && +f.year >= now - 3)) || newest(actual)
+      || newest(past.filter((f) => f.unit === 'expected' && +f.year >= now - 1)) || newest(figs.filter((f) => +f.year > now));
+    const est = att.estimate && att.estimate.low > 0 && att.estimate.high >= att.estimate.low ? att.estimate : null;
+    const range = est ? `${commasN(est.low)}–${commasN(est.high)}` : '';
+    const estUnit = (est && est.unit) || 'visitors';
+    if (pick) return { mark: attMark(pick.basis), text: attFigureText(pick), year: pick.year || '', next: range ? `Next: ${range}${(pick.unit || 'visitors') !== estUnit ? ' ' + estUnit : ''}` : '' };
+    if (est) return { mark: 'estimate', text: `${range} ${estUnit}`, year: '', next: '' };
+    return { mark: 'none', text: figs.length ? 'No recent figures' : 'Not published', year: '', next: '' };
+  }
+  /** Every figure, newest first, each with its mark: for the Attendance popup. */
+  function attFigures(att) {
+    return ((att && att.figures) || []).filter(Boolean).slice().sort((a, b) => (b.year || 0) - (a.year || 0)).map((f) => Object.assign({}, f, { mark: attMark(f.basis), shown: attFigureText(f) }));
+  }
+  /** The diary show an exhibition is, so its attendance can be shown there too. */
+  function diaryEntryFor(show, diary) {
+    if (!show || !diary || !Array.isArray(diary.shows)) return null;
+    return diary.shows.find((e) => !e.series && diaryMatch(e, [show]) === show) || null;
+  }
+
+  /** "Checked 20 Oct 2026" from the diary's date. */
+  function diaryChecked(iso) { const n = dayNum(iso); return isNaN(n) ? '' : `Checked ${fmtDates(iso)}`; }
+
+  /* ---------- Sharing and links ---------- */
+
+  /**
+   * What is in the link box of a new exhibition. Web addresses ({ kind: 'links', urls }); an exhibitor list pasted there by
+   * mistake ({ kind: 'list' }): several lines, or a line that reads like "Acme Ltd, www.acme.co.uk", that do not start with an
+   * address; or a link with a mistake in it ({ kind: 'bad', bad }), naming the first part that is not a web address.
+   */
+  function linkBoxKind(text) {
+    const lines = String(text || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return { kind: 'empty', urls: [] };
+    const tokens = lines.join(' ').split(/\s+/).filter(Boolean);
+    const urls = tokens.map(validUrl);
+    if (urls.every(Boolean)) return { kind: 'links', urls };
+    const startsWithLink = lines.every((l) => validUrl(l.split(/[\s,]+/)[0]));
+    if (!startsWithLink && (lines.length >= 2 || /[\s,]/.test(lines[0]))) return { kind: 'list' };
+    return { kind: 'bad', bad: tokens[urls.findIndex((u) => !u)] };
+  }
+
+  /** The small line under the app's name: "Sector" and "2 exhibitions", "Art and crafts" and "163 exhibitors". No count while it is 0. */
+  function whereParts(label, n, one) {
+    n = Math.max(0, Math.round(+n || 0));
+    return { label: String(label || ''), count: n ? `${commas(n)} ${n === 1 ? one : one + 's'}` : '' };
+  }
+
+  function validUrl(u) {
+    let t = String(u || '').trim();
+    if (!t || /\s/.test(t)) return '';
+    if (!/^https?:\/\//i.test(t)) t = 'https://' + t;
+    const m = /^(https?):\/\/([^/?#:]+)(?::\d+)?([/?#].*)?$/i.exec(t);
+    if (!m || !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(m[2])) return '';
+    return t;
+  }
+
+  /** What Android's Share sheet hands us (title, text, url) becomes a link and a name. */
+  function parseShared(p) {
+    p = p || {};
+    const find = (s) => { const m = /https?:\/\/[^\s<>"']+/i.exec(String(s || '')); return m ? m[0].replace(/[).,;]+$/, '') : ''; };
+    const url = find(p.url) || find(p.text) || find(p.title);
+    const strip = (s) => String(s || '').replace(/https?:\/\/[^\s<>"']+/gi, '').replace(/\s+/g, ' ').trim();
+    const name = strip(p.title) || strip(p.text);
+    return { url: url ? validUrl(url) : '', name: name.slice(0, 120) };
+  }
+
+  /** The Apps Script web app address, in either of its two forms. */
+  function validApiUrl(u) {
+    const t = String(u || '').trim();
+    return /^https:\/\/script\.google\.com\/(?:macros|a\/macros\/[^/]+|a\/[^/]+\/macros)\/s\/[A-Za-z0-9_-]{10,}\/exec$/.test(t) ? t : '';
+  }
+
+  function slug(s, max) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, max || 40) || 'list';
+  }
+
+  /* ---------- CSV ---------- */
+
+  const CSV_COLUMNS = ['Business', 'Website', 'Contact name', 'Contact source', 'Email', 'Email type', 'Phone', 'Can email without consent',
+    'Company match', 'Company name', 'Company number', 'Company status', 'Companies House page', 'Google Workspace', 'Mail host', 'Also uses', 'Exhibition', 'Sector', 'Stand', 'Category', 'Notes'];
+
+  function csvCell(v) {
+    let s = String(v == null ? '' : v).replace(/\r\n|\r|\n/g, ' ').trim();
+    if (/^[=+\-@\t]/.test(s)) s = "'" + s;   // a spreadsheet must never run exhibitor text as a formula
+    return /[",]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  const CAN_TXT = { corporate: 'Yes, corporate subscriber', check: 'Check first', consent: 'No, get consent first', pending: 'Not checked yet' };
+  const MATCH_TXT = { verified: 'Confirmed', likely: 'Likely', possible: 'Possible', none: 'None found' };
+  const WS_TXT = { yes: 'Yes', likely: 'Probably', no: 'No', unknown: 'Unknown' };
+
+  function toCsv(rows, showsById) {
+    const lines = [CSV_COLUMNS.map(csvCell).join(',')];
+    (rows || []).forEach((r) => {
+      const st = statusOf(r), show = (showsById && showsById[r.showId]) || {};
+      const done = st !== 'pending';
+      const cells = [
+        r.name, r.website, r.contact, r.contact ? r.contactSrc : '', r.email, emailKindLabel(r.emailKind), r.phone, CAN_TXT[st],
+        done ? MATCH_TXT[r.legal] || '' : '', r.companyName, r.companyNo, r.companyStatus, companyUrl(r.companyNo),
+        done ? WS_TXT[r.workspace] || 'Unknown' : '', r.mailHost, done ? r.alsoUses : '',
+        r._shows ? r._shows.join('; ') : show.name, r._sector || show.sector, r.stand, r.category, [r.note, r._also && r._also.length ? 'Also listed as ' + r._also.join('; ') : ''].filter(Boolean).join('. '),
+      ];
+      lines.push(cells.map(csvCell).join(','));
+    });
+    return '﻿' + lines.join('\r\n') + '\r\n';
+  }
+
+  const looseName = (n) => String(n || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '').replace(/^the/, '').replace(/(limited|ltd|plc|llp)$/, '');
+
+  /**
+   * Several shows in one list: the same website only once, with every show it appeared at.
+   * Brands that share a website (a distributor with several names) become one line, and the other names go in the notes.
+   */
+  function mergeBySite(rows, showsById) {
+    const by = new Map();
+    (rows || []).forEach((r) => {
+      const key = r.domain ? 'd:' + r.domain : 'n:' + looseName(r.name);
+      const show = (showsById && showsById[r.showId]) || {};
+      const have = by.get(key);
+      if (!have) { by.set(key, { best: Object.assign({}, r, { _shows: show.name ? [show.name] : [], _sector: show.sector }), names: [r.name] }); return; }
+      const b = have.best;
+      if (show.name && b._shows.indexOf(show.name) < 0) b._shows.push(show.name);
+      if (have.names.indexOf(r.name) < 0) have.names.push(r.name);
+      // keep whichever copy is more useful, but never lose the show list
+      if (rank(r) < rank(b) || (rank(r) === rank(b) && !b.email && r.email)) {
+        have.best = Object.assign({}, r, { _shows: b._shows, _sector: b._sector || show.sector });
+      }
+    });
+    return Array.from(by.values()).map((m) => {
+      const mine = looseName(m.best.name), seen = {};
+      m.best._also = m.names.filter((n) => { const k = looseName(n); if (k === mine || seen[k]) return false; seen[k] = 1; return true; });
+      return m.best;
+    });
+  }
+
+  /**
+   * "Your leads" as one short line per fact, in two groups, each with the bar drawn above its lines:
+   *   status: can be emailed, need a quick check, need consent
+   *   email:  Google, Microsoft, other or not known (once anything has been checked)
+   * A line is { n, text, k, pct }. Percentages are of the exhibitors checked so far, so each group's add up to 100.
+   * A bar segment is { k, n }: its width is a share of every exhibitor, so while checks run the part not checked yet
+   * stays empty, and the coloured parts keep the same proportions as the percentages in the lines.
+   * Returns null while there are no exhibitors to count.
+   */
+  function leadGroups(c) {
+    if (!c || !c.total) return null;
+    const base = c.done || 0, pending = c.pending || 0;
+    const corp = c.corporate || 0, check = c.check || 0, consent = c.consent || 0;
+    const [pCorp, pCheck, pConsent] = shares([corp, check, consent], base);
+    // the top line: a tick when everything is checked; "111 of 135 checked" while leads wait (the screen adds the spinner and the button)
+    const head = pending ? { n: `${commas(c.done)} of ${commas(c.total)}`, text: 'checked', pending } : { n: commas(c.total), text: c.total === 1 ? 'exhibitor' : 'exhibitors', done: true };
+    // `k` ties a line to its colour in the bar; the order matches the bar (can email, check, consent)
+    const status = [{ n: commas(corp), text: 'can be emailed without asking first', k: 'corporate', pct: pCorp }];
+    if (check) status.push({ n: commas(check), text: check === 1 ? 'needs a quick check' : 'need a quick check', k: 'check', pct: pCheck });
+    if (consent) status.push({ n: commas(consent), text: consent === 1 ? 'needs consent' : 'need consent', k: 'consent', pct: pConsent });
+    const seg = (k, n) => ({ k, n });
+    const out = { head, status: { lines: status, bar: [seg('corporate', corp), seg('check', check), seg('consent', consent), seg('pending', pending)].filter((x) => x.n > 0) }, email: null };
+    if (base) {
+      const g = c.google || 0, m = c.microsoft || 0, o = Math.max(0, base - g - m);
+      const [pG, pM, pO] = shares([g, m, o], base);
+      out.email = {
+        lines: [
+          { n: commas(g), text: g === 1 ? 'uses Google for email' : 'use Google for email', k: 'google', pct: pG },
+          { n: commas(m), text: m === 1 ? 'uses Microsoft for email' : 'use Microsoft for email', k: 'microsoft', pct: pM },
+          { n: commas(o), text: 'other or not known', k: 'other', pct: pO },
+        ],
+        bar: [seg('google', g), seg('microsoft', m), seg('other', o), seg('pending', pending)].filter((x) => x.n > 0),
+      };
+    }
+    return out;
+  }
+
+  const BAR_WORDS = { corporate: 'can be emailed without asking first', check: 'need a quick check', consent: 'need consent', google: 'use Google', microsoft: 'use Microsoft', other: 'other or not known', pending: 'not checked yet' };
+  /** What a bar shows, in words, for screen readers. */
+  function barLabel(title, bar) { return title + ': ' + bar.map((x) => `${commas(x.n)} ${BAR_WORDS[x.k]}`).join(', '); }
+
+  /**
+   * Whole-number percentages of `base`. When the values together make up the whole base (can email, check and consent do),
+   * they are rounded so that they add up to 100. Anything above zero but under one percent reads "<1%".
+   */
+  function shares(values, base) {
+    if (!base) return values.map(() => '');
+    const raw = values.map((v) => (v / base) * 100);
+    let out = raw.map(Math.round);
+    if (values.reduce((a, b) => a + b, 0) === base) {
+      out = raw.map(Math.floor);
+      let left = 100 - out.reduce((a, b) => a + b, 0);
+      raw.map((x, i) => ({ i, f: x - Math.floor(x) })).sort((a, b) => b.f - a.f || a.i - b.i).forEach((o) => { if (left > 0 && values[o.i] > 0) { out[o.i]++; left--; } });
+    }
+    return values.map((v, i) => (v > 0 && out[i] === 0 ? '<1%' : out[i] + '%'));
+  }
+
+  /**
+   * Roughly how long the leads still waiting will take, from the average time per business (Settings, Speed).
+   * With the app open it checks continuously; left alone, the background run checks for about 3 minutes in every 10.
+   * '' when there is no average yet.
+   */
+  function waitTime(pending, perBusiness, inApp) {
+    const per = +perBusiness;
+    if (!(pending > 0) || !(per > 0)) return '';
+    const min = (pending * per * (inApp ? 1.1 : 600 / 180)) / 60;
+    if (min < 1) return 'under a minute';
+    if (min < 10) return `about ${Math.round(min)} ${Math.round(min) === 1 ? 'minute' : 'minutes'}`;
+    if (min < 90) return `about ${Math.round(min / 5) * 5} minutes`;
+    const h = Math.round(min / 30) / 2;
+    return `about ${String(h).replace('.5', '½')} hours`;
+  }
+
+  /** The small line under "111 of 135 checked": "24 waiting · about 2 minutes", or how long the background run would take when paused. */
+  function waitingLine(pending, perBusiness, running) {
+    const n = `${commas(pending)} waiting`;
+    if (running) { const t = waitTime(pending, perBusiness, true); return n + (t ? ' · ' + t : ''); }
+    const t = waitTime(pending, perBusiness, false);
+    return `${n} · paused here · ${t ? 'the background run takes ' + t : 'the background run carries on every 10 minutes'}`;
+  }
+
+  /**
+   * In the installed app on Android a link with target=_blank opens inside the app (Chrome's in-app view). A business's website
+   * should open as a new tab in Chrome itself, so the app asks Android for Chrome with an intent link; if Chrome is not there,
+   * the fallback address opens the usual way.
+   */
+  function chromeIntent(url) {
+    const m = /^(https?):\/\/([^\/?#]+)([^#]*)(#.*)?$/i.exec(String(url || ''));
+    if (!m) return '';
+    return `intent://${m[2]}${m[3] || '/'}#Intent;scheme=${m[1].toLowerCase()};package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(url)};end`;
+  }
+
+  /** A random notification code for ntfy: a prefix and 18 letters and digits. `rand(n)` gives n random bytes. */
+  function makeTopic(rand) {
+    const A = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let out = '';
+    while (out.length < 18) Array.from(rand(32)).forEach((b) => { if (out.length < 18 && b < 252) out += A[b % 36]; });   // 252 is 7 x 36: no bias towards the first letters
+    return 'exl-' + out;
+  }
+
+  /** The exhibition a notification links to, from "#show=abc123". Empty if it is anything else. */
+  function showFromHash(h) { const m = /^#show=([A-Za-z0-9]{6,20})$/.exec(String(h || '')); return m ? m[1] : ''; }
+
+  /** The exhibitions a lead is listed in, its own first: this one and the others the server found it in. */
+  function listedIn(row) {
+    const out = [];
+    [row && row.showId].concat((row && row.alsoIn) || []).forEach((id) => { if (id && out.indexOf(id) < 0) out.push(id); });
+    return out;
+  }
+  const listedCount = (row) => listedIn(row).length;
+
+  /** Sites the app could not read, for Settings, from the script's tally. Null when there is nothing to say. */
+  function reachSummary(rc) {
+    if (!rc || typeof rc !== 'object' || !rc.checked) return null;
+    const n = (k) => Math.max(0, +rc[k] || 0);
+    const lines = [];
+    if (n('turnedAway')) lines.push({ n: n('turnedAway'), text: 'turned the app away (the site answers 403 or similar)' });
+    if (n('robots')) lines.push({ n: n('robots'), text: n('robots') === 1 ? 'asks automated tools to stay away (robots.txt)' : 'ask automated tools to stay away (robots.txt)' });
+    if (n('silent')) lines.push({ n: n('silent'), text: 'did not open or answer' });
+    if (n('partial')) lines.push({ n: n('partial'), text: n('partial') === 1 ? 'opened, but its policy pages did not' : 'opened, but their policy pages did not' });
+    return { sites: n('sites'), checked: n('checked'), pct: shares([n('sites')], n('checked'))[0], lines };
+  }
+
+  /* ---------- Daily usage (the Today line in Settings, and the warning) ---------- */
+
+  const WARN_AT = 70;
+  const commas = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  /**
+   * What the sheet reports as used over the last 24 hours, ready to show.
+   * Returns null when there is nothing usable, so the screen simply shows no usage rather than a wrong one.
+   */
+  function usage(u) {
+    const lim = u && u.limits;
+    if (!lim || !(+lim.fetches > 0) || !(+lim.bgMinutes > 0)) return null;
+    const one = (used, limit, text) => {
+      used = Math.max(0, +used || 0);
+      const exact = (used / limit) * 100;
+      return { used, limit, pct: Math.min(100, Math.round(exact)), width: used > 0 ? Math.min(100, Math.max(1.5, exact)) : 0, text };
+    };
+    const f = +u.fetches || 0, b = +u.bgMinutes || 0;
+    const bgShown = b > 0 && b < 1 ? 'under 1' : commas(b);
+    const fetches = one(f, +lim.fetches, `${commas(f)} of ${commas(lim.fetches)}`);
+    const bg = one(b, +lim.bgMinutes, `${bgShown} of ${commas(lim.bgMinutes)}`);
+    const warn = fetches.used / fetches.limit * 100 >= WARN_AT || bg.used / bg.limit * 100 >= WARN_AT;
+    let message = '';
+    if (warn) {
+      message = fetches.used / fetches.limit >= bg.used / bg.limit
+        ? `Web requests are at ${fetches.pct}% of Google's daily limit. Checking stops if it runs out, then picks up again.`
+        : `Background time is at ${bg.pct}% of Google's daily limit. Checks while the app is closed stop if it runs out, then pick up again.`;
+    }
+    return { fetches, bg, warn, message };
+  }
+
+  /* ---------- Settings: how company matches were made, how fast checks run, a recheck in progress ---------- */
+
+  // In the order of how much each can be trusted. The first seven count as confirmed, the next four are left for you to decide.
+  const EVIDENCE = [
+    ['number', 'Company number on its website', 'corporate'],
+    ['name', 'Legal name on its website', 'corporate'],
+    ['owner', 'Company behind the brand on its website', 'corporate'],
+    ['postcode', 'Registered postcode on its website', 'corporate'],
+    ['director', 'A director named on its website, as its contact or in its email', 'corporate'],
+    ['dirpost', 'A director\u2019s postcode on its website', 'corporate'],
+    ['carryon', 'Same director as its closed company, registered at the same postcode', 'corporate'],
+    ['you', 'Confirmed by you', 'corporate'],
+    ['closed', 'Company found, but no longer active', 'check'],
+    ['same', 'Same name on Companies House', 'check'],
+    ['conflict', 'Same name, but its website names another company', 'check'],
+    ['branch', 'May be a franchise or branch of the company named', 'check'],
+    ['successor', 'Active company at the postcode of its closed one', 'check'],
+    ['similar', 'Similar name on Companies House', 'check'],
+    ['none', 'No company found', 'consent'],
+  ];
+
+  function evidenceRows(ev) {
+    if (!ev || typeof ev !== 'object') return null;
+    const rows = EVIDENCE.map((e) => ({ key: e[0], label: e[1], tone: e[2], n: Math.max(0, Math.round(+ev[e[0]] || 0)) })).filter((r) => r.n > 0);
+    const total = rows.reduce((a, r) => a + r.n, 0);
+    return total ? { rows, total } : null;
+  }
+
+  const SPEED_PARTS = [['show', 'Show page'], ['site', 'Home page'], ['pages', 'Other pages'], ['mail', 'Mail records'], ['ch', 'Companies House'], ['sheet', 'Saving to your sheet']];
+
+  /** The average check over the last 60, and where its time went. The first requests go out together, so they all show under Home page. */
+  function speedLines(sp) {
+    if (!sp || !(+sp.n > 0) || !(+sp.seconds > 0)) return null;
+    const one = (x) => (Math.round((+x || 0) * 10) / 10).toFixed(1);
+    const top = Math.max(0.1, ...SPEED_PARTS.map((q) => +sp[q[0]] || 0));
+    const parts = SPEED_PARTS.map((q) => ({ key: q[0], label: q[1], text: one(sp[q[0]]) + ' s', width: (+sp[q[0]] || 0) > 0 ? Math.max(2, Math.round((+sp[q[0]] / top) * 100)) : 0 })).filter((q) => q.width > 0);
+    const slowest = (sp.slowest || []).filter((h) => h && h.host).map((h) => ({ host: String(h.host), text: one(h.seconds) + ' s' }));
+    const per = one(sp.seconds);
+    const hour = Math.round(3600 / Math.max(1, +sp.seconds));
+    return { n: Math.round(+sp.n), per: per + ' s', requests: one(sp.requests), perHour: commas(hour), parts, slowest };
+  }
+
+  /**
+   * The answer to "Why this result?", as something to read and to copy: what the lead says now, what a fresh check says,
+   * and the steps in between. Plain text, so it can be pasted into a message.
+   */
+  function explainText(row, j) {
+    const r = row || {}, x = j || {};
+    const lines = Array.isArray(x.lines) ? x.lines.map((l) => String(l)) : [];
+    const say = (o) => (o && (o.legal || o.legalSrc) ? [o.legal || 'none', o.legalSrc || ''].filter(Boolean).join(': ') : 'no company yet');
+    const saved = say(x.saved), now = say(x.now);
+    const changed = !!(x.saved && x.now && (x.saved.legal !== x.now.legal || x.saved.legalSrc !== x.now.legalSrc || x.saved.emailable !== x.now.emailable));
+    const head = [
+      String(r.name || ''),
+      String(r.website || 'no website'),
+      'Apps Script release ' + (x.build != null ? x.build : 'unknown') + (x.seconds != null ? ', took ' + x.seconds + ' s' : ''),
+      '',
+      'Saved on your sheet: ' + saved,
+      'A fresh check now: ' + now,
+      '',
+    ];
+    return { changed, saved, now, lines, text: head.concat(lines).join('\n').trim() };
+  }
+
+  /** Whether the Apps Script behind the app is older than the app expects. A script that predates the marker reports nothing at all. */
+  function scriptOutdated(build, expect) {
+    if (build == null) return false;          // not asked yet
+    return (+build || 0) < (+expect || 0);
+  }
+
+  /** A recheck: where the group of leads stood when it was queued, and where it stands now. */
+  function recheckSummary(rc) {
+    if (!rc || typeof rc !== 'object') return null;
+    const g = (o, k) => Math.max(0, Math.round(+(o && o[k]) || 0));
+    const rows = [['corporate', 'Can email'], ['check', 'To check'], ['consent', 'Consent needed']].map((q) => ({ key: q[0], label: q[1], before: g(rc.before, q[0]), now: g(rc.now, q[0]) }));
+    return { at: rc.at || '', scope: rc.scope || '', queued: g(rc, 'queued'), pending: g(rc, 'pending'), all: rc.include === 'all', rows, gained: Math.max(0, g(rc.now, 'corporate') - g(rc.before, 'corporate')) };
+  }
+
+  return {
+    esc, plural, dayNum, todayIso, GROUPS, showGroup, groupShows, fmtDates, ago,
+    STATUS_LABEL, statusOf, isGoogle, isMicrosoft, providerOf, countRows, workspaceShort, workspaceLabel, rowSub, rowParts, companyTypeLabel, companyUrl, legalLabel, emailRule, emailKindLabel,
+    FILTERS, filterRows, filterCount, summary, isUnread, shares, listedIn, listedCount, reachSummary, makeTopic, showFromHash,
+    SECTOR_PRESETS, cleanSector, matchSector, sectorsFrom, searchLinks,
+    validUrl, linkBoxKind, whereParts, parseShared, isDirectory, finderPages, tileFor, mapsUrl, searchText, validApiUrl, slug,
+    ATT_MARKS, attMark, attHeadline, attFigures, attFigureText, attRangeText, diaryEntryFor,
+    diaryFile, DIARY_TYPES, diaryTypes, DIARY_DATES, diaryPhase, monthLabel, diaryMatch, diaryView, diaryPrefill, diaryName, diaryChecked, fitsYear, plainText,
+    CSV_COLUMNS, csvCell, toCsv, mergeBySite, usage, sectorOptions, resolveSector, leadGroups, barLabel,
+    evidenceRows, speedLines, recheckSummary, explainText, scriptOutdated, chromeIntent, waitTime, waitingLine,
+  };
+});

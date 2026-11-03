@@ -2,7 +2,7 @@
 
 G's private control room for the Showsum outreach engine: one app on desktop and phone that sits over the existing Showsum Pipeline and Exhibitor Leads scripts.
 
-**Release 6:** one business, not one row. HQ knows when rows across shows are the same business, and autopilot rests a business 30 days before a new show's first email, sends it at most 4 emails a year and never two in a day. Release 5 brought autopilot: you start batches in HQ; the pipeline's HQAutopilot file emails them on weekday mornings, through the pipeline's own templates, Gmail alias, rules and limits. Release 4 brought the Inbox; release 3 batches; release 2 the live Overview and Customers; release 1 the shell, the Google sign-in lock, Launchpad and Settings.
+**Release 7:** Exhibitors. Everything the Exhibitor Leads app does, inside HQ, with the pipeline's side of each show: Go (the pipeline's own import, straight away), a fast-lane batch of the P1 and P2 ones that you start, and your Companies House calls on "Check" rows. Release 6: one business, not one row. HQ knows when rows across shows are the same business, and autopilot rests a business 30 days before a new show's first email, sends it at most 4 emails a year and never two in a day. Release 5 brought autopilot: you start batches in HQ; the pipeline's HQAutopilot file emails them on weekday mornings, through the pipeline's own templates, Gmail alias, rules and limits. Release 4 brought the Inbox; release 3 batches; release 2 the live Overview and Customers; release 1 the shell, the Google sign-in lock, Launchpad and Settings.
 
 Lives at **https://hq.quick-sheet.com** (GitHub Pages with its own subdomain, so no other app shares its address).
 
@@ -19,7 +19,10 @@ HQ script (apps-script/Code.gs, a standalone Apps Script web app)
    │   take someone out); the Inbox row you sort, and for a real reply or an opt-out that prospect's Stage, Next action,
    │   its date, Notes, and a Touches line; the HQ settings tab (autopilot Off / Dry run / Live, dry run, your check)
    └── Launchpad links and settings live in its Script Properties
-HQ app ──► Exhibitor Leads web app directly (later release; it accepts the same sign-in)
+HQ Exhibitors page (exhibitors/) ──► Exhibitor Leads web app directly, with the same sign-in (its release 19 checks it
+   │                                   as HQ does); its address comes from HQ (EL_URL), only after you sign in
+   └──► HQ script: the pipeline's side of each show; Go and your Companies House calls, which HQ's script passes to
+        the pipeline web app (PIPELINE_URL, SHEET_SECRET); the fast-lane batch, made like any other batch
 
 Pipeline script + HQInbox.gs + HQAutopilot.gs (apps-script/pipeline/, pasted into the pipeline's own Apps Script project)
    ├── HQInbox, every hour, 7am–9pm: logs new messages from prospects to the Inbox tab. HQ never opens Gmail.
@@ -39,7 +42,7 @@ Pipeline script + HQInbox.gs + HQAutopilot.gs (apps-script/pipeline/, pasted int
 
   The script checks the token's claims itself first, so junk never reaches Google. Google then checks the signature (tokeninfo).
 - **One account, for good.** The first sign-in records that account's permanent Google ID in **HQ_SUB**. From then on, only that account gets in.
-- **Remembered by hash.** A checked sign-in is remembered by its SHA-256, never the sign-in itself, until it expires. Signing out ends it on the server too.
+- **Remembered by hash.** A checked sign-in is remembered by its SHA-256, never the sign-in itself, until it expires. Signing out ends it on the server too, in HQ's script and in Exhibitor Leads.
 - **Failed checks pause.** After 30 failed checks in 10 minutes, new checks pause for 10 minutes. A sign-in already checked keeps working.
 - **Locked to your script.** `config.js` holds a fingerprint of your HQ script's address (`scriptPin`), not the address itself. HQ refuses to connect to any other script, whether typed in or from a link. HQ also refuses to run inside another page.
 - The app never sees Script Property values, only whether each one is set.
@@ -49,6 +52,8 @@ Pipeline script + HQInbox.gs + HQAutopilot.gs (apps-script/pipeline/, pasted int
   - when you sort a reply: that Inbox row's Status and Confirmed cells. For a real reply also the prospect's Stage (New or Emailed become Engaged; other stages are left as you set them), Next action, Next action date and a line at the top of Notes, and one "Real reply" line in Touches. For an opt-out, their rows become Opted out with the next action cleared, a Notes line, and one "Opted out" line in Touches.
 
   The tests fail if it writes anywhere else. Before writing to Prospects it reads the Code column again, and if any row moved it saves nothing. It finds the Inbox row by its Message ID again just before writing its Status. Stage is written last and the Notes and Touches lines aren't repeated, so trying again after a failure finishes the job. Its own settings live in its Script Properties: the Launchpad, the name HQ calls you, and which customers are tests.
+- **Exhibitors:** the page shows exhibitors' emails and phones, as the Exhibitor Leads app does, and like the rest of HQ holds them in memory only, gone when the page closes. A CSV download is the one thing that saves to the device, and only when you press it. Exhibitor Leads takes your HQ sign-in only when its own Script Properties name HQ's client ID, your email and HQ_SUB (the same values as HQ's); without them it still takes only its phone token.
+- **Go and your calls go through the pipeline.** HQ's script never writes Prospects rows itself for these: Go runs the pipeline's own import (the same rules as Import a show from Exhibitor Leads), and Yes (Ltd) or Consent needed is the pipeline's canEmail op, only on a "Check" row not yet emailed. The fast-lane batch is made, never started.
 - HQ's script never touches Gmail. The pipeline's HQInbox file reads it, as the pipeline already does for "no thanks" and bounces, and only adds rows to the Inbox tab. The pipeline's HQAutopilot file sends, exactly as the Showsum menu does.
 - Switching autopilot to Live, pressing Continue after the first-emails check, and starting a batch while autopilot is Live need a sign-in from the last 10 minutes. The app renews it by itself and tries again.
 - The app drops any answer that arrives after you sign out.
@@ -75,7 +80,7 @@ HQ shows both lines the first time you connect. On a Mac, you can also work out 
 | PIPELINE_SHEET_ID, LEADS_SHEET_ID, POS_DB_ID | The three sheets (the code between `/d/` and `/edit` in each address) | Release 2 |
 | PIPELINE_URL, SHEET_SECRET | The pipeline web app address and its secret | Release 3 |
 | TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID | Same as the pipeline's | Release 4 |
-| EL_URL | Exhibitor Leads web app address | Release 6 |
+| EL_URL | Exhibitor Leads web app address (ending /exec): the Exhibitors page talks to it | Release 7 |
 | HQ_NAME, HQ_NOT_CUSTOMERS_… | Saved by HQ itself (Settings → What HQ calls you; Customers → Not a customer). No need to touch them | Release 2 |
 
 ## Releasing
@@ -89,6 +94,14 @@ If `Code.gs` changed, also bump `BUILD` in `Code.gs` and `EXPECT_BUILD` in `hq.j
 
 - **Apps Script:** paste `Code.gs` → Deploy → Manage deployments → pencil → Version: New version → Deploy. The address stays the same.
 - **GitHub:** upload the changed files (Add file → Upload files → Commit), wait for the Pages tick, then reload HQ.
+
+## Exhibitors
+
+- **The page:** Exhibitors in the nav opens `exhibitors/`, the Exhibitor Leads app inside HQ: sectors, the show diary, shows, loading or pasting lists, the checks, Why this result?, Find on Companies House, rechecks, the organiser contact, CSV and notifications.
+- **In the pipeline**, on each show: how many are in the pipeline, emailed and can email; the ones waiting for your Companies House call; its batches; what's not in the pipeline yet. Each exhibitor carries its priority, stage or "Your call", and its batch.
+- **Go** runs the pipeline's own import for that show, straight away, for the exhibitors already checked (the rest, and any other listing of the same business, wait for the next Go). Going defaults to No for a new show, as in the menu. Then, if ticked, it makes a **fast-lane batch** of the P1 and P2 ones due a first email and not in a batch. Nothing is started: open it on the Departures board, check Members, press Start. Go again any time: it adds only what's new. For rows not yet emailed it also follows Exhibitor Leads, safely: "Check" becomes "Yes (Ltd)" once the company is confirmed, only while the row is New, in no batch and still on Check Companies House (so a Check you set yourself stays); and a business you've decided in Exhibitor Leads isn't an emailable company becomes Consent needed (or Check), emailed or not, whatever its batch, with its rows at other shows. Rows are decided again just before they're written, so a call you make meanwhile stands. One import at a time (Go or the menu's); it never keeps the website waiting.
+- **Your call on "Check" rows:** Yes (Ltd) or Consent needed, from the exhibitor. Yes (Ltd) on a company Exhibitor Leads hasn't confirmed asks first. A Yes (Ltd) row has "Not a limited company? Consent needed". Deciding a company in Exhibitor Leads moves the pipeline row with it: a confirmed company lifts a "Check" row to Yes (Ltd), only before any email; "No, a different one" makes it Consent needed, emailed or not (its follow-up becomes Ask before emailing). One business, not one row: Consent needed or a hold also reaches the same business's rows at other shows (matched as autopilot matches a business; consent they gave stays), each with a note saying why. Each change says what it expects the row to be, and the pipeline changes nothing if the row says otherwise. The home page lists the shows with calls waiting, and Your turn's Check Companies House card opens the page.
+- **Set-up, once:** in Exhibitor Leads' Script Properties add HQ_CLIENT_ID, ALLOWED_EMAIL and HQ_SUB, with the same values as HQ's, then deploy its release 19 as a new version. In HQ's add EL_URL. Go also needs PIPELINE_URL and SHEET_SECRET (already there from release 3) and the pipeline's fix-47.
 
 ## Batches
 
@@ -132,6 +145,13 @@ If `Code.gs` changed, also bump `BUILD` in `Code.gs` and `EXPECT_BUILD` in `hq.j
 - **To stop at once:** switch it Off in HQ, or delete the `hqAutopilotTick` trigger.
 
 ## Releases
+
+- **7** (3 Nov 2026):
+  - Exhibitors page: the Exhibitor Leads app inside HQ, on HQ's sign-in, in memory only.
+  - The pipeline's side of each show; Go; the fast-lane batch; Yes (Ltd) or Consent needed on "Check" rows, also when you confirm a company; the shows with calls waiting.
+  - Nav: Exhibitors. Your turn: Check Companies House opens it. Sharing a show's page to HQ on Android opens Add exhibition.
+  - Autopilot as it happens: while it's sending (Live or a dry run, in its window), the Overview looks every 30 seconds (the HQ settings tab only), reloads the moment a run lands and says what went; the panel counts down to the next run. Back on the tab, it catches up at once.
+  - Needs: HQ Code.gs (build 7), the pipeline's fix-47, Exhibitor Leads release 19.
 
 - **6** (2 Nov 2026):
   - One business across rows and shows: matched by name ("+" = "and"), address, own email domain or website.

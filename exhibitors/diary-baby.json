@@ -1,0 +1,1156 @@
+{
+ "sector": "Baby & toddler",
+ "about": "UK shows where baby, toddler, nursery and newborn brands and resellers exhibit.",
+ "checked": "2026-10-20",
+ "shows": [
+  {
+   "name": "Harrogate International Nursery Fair",
+   "start": "2026-10-18",
+   "end": "2026-10-20",
+   "venue": "Harrogate Convention Centre, Harrogate",
+   "type": "trade",
+   "dates": "organiser",
+   "who": "The UK’s only dedicated nursery trade show. Pram, car seat, furniture and nursery brands sell to baby shops and buyers.",
+   "site": "https://www.nurseryfair.com",
+   "source": "https://nurserytoday.co.uk/2026/02/03/booking-open-for-the-uks-only-nursery-trade-show/",
+   "sourceName": "Nursery Today",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2022,
+      "number": null,
+      "unit": "",
+      "text": "Visitor numbers were up on last year",
+      "basis": "organiser",
+      "source": "https://nurserytoday.co.uk/?p=4151",
+      "sourceName": "Nursery Today"
+     },
+     {
+      "year": 2023,
+      "number": null,
+      "unit": "",
+      "text": "an increase in attendance of over 20% across the three October shows (2021 to 2023)",
+      "basis": "organiser",
+      "source": "https://www.nurseryfair.com/press/HINF-after-show-PR-23-Oct-23_m.pdf",
+      "sourceName": "Organiser press release"
+     },
+     {
+      "year": 2026,
+      "number": null,
+      "unit": "",
+      "text": "91.8% of visitors are buyers",
+      "basis": "organiser",
+      "source": "https://www.nurseryfair.com/pdfs/HINF-2026-Brochure-FINAL-h_m.pdf",
+      "sourceName": "Organiser brochure"
+     }
+    ],
+    "note": "The organiser publishes trends and who visits, not a headcount. Over 100 exhibitors and 200 brands.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "The Baby Show",
+   "edition": "Olympia London",
+   "start": "2026-10-23",
+   "end": "2026-10-25",
+   "venue": "Olympia, London",
+   "type": "consumer",
+   "dates": "organiser",
+   "who": "The UK’s biggest public baby show. Big brands plus independent retailers and small makers selling from stands.",
+   "site": "https://www.thebabyshow.co.uk/olympia",
+   "list": "https://www.thebabyshow.co.uk/olympia/products/exhibitor-directory",
+   "source": "https://www.thebabyshow.co.uk/olympia",
+   "sourceName": "thebabyshow.co.uk",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2022,
+      "number": 23224,
+      "unit": "visitors",
+      "text": "23,224 visitors in 2022 at Olympia London (research independently conducted by Explori Media Ltd)",
+      "basis": "organiser",
+      "source": "https://thebabyshow.co.uk/manchester/exhibit",
+      "sourceName": "The Baby Show"
+     },
+     {
+      "year": 2024,
+      "number": 25000,
+      "unit": "expected",
+      "text": "Over 25,000 people will descend on London",
+      "basis": "claim",
+      "source": "https://www.thebabyshow.co.uk/news/baby-show-lidl-gb-uks-ultimate-pregnancy-parenting-show-returns-olympia-london-25th-27th-october",
+      "sourceName": "The Baby Show"
+     },
+     {
+      "year": 2025,
+      "number": 25000,
+      "unit": "expected",
+      "text": "Over 25,000 people will descend to the show across the three days",
+      "basis": "claim",
+      "source": "https://www.thebabyshow.co.uk/news/baby-show-returns-olympia-london-uks-biggest-best-pregnancy-parenting-show-back-24th-26th-october-2025",
+      "sourceName": "The Baby Show"
+     }
+    ],
+    "estimate": {
+     "low": 22000,
+     "high": 26000,
+     "unit": "visitors",
+     "how": "From its last count (23,224 in 2022) up to the organiser’s own forecast of over 25,000."
+    },
+    "note": "The organiser also says 80,000 to 85,000 people a year visit its shows in all. Its NEC and ExCeL shows were ABC-audited from 2004 to 2008; those figures are behind an ABC login.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Baby & Toddler Show",
+   "edition": "Birmingham",
+   "start": "2026-10-30",
+   "end": "2026-11-01",
+   "venue": "NAEC Stoneleigh, Warwickshire",
+   "type": "consumer",
+   "dates": "organiser",
+   "who": "About 90 exhibitors: brands such as Bugaboo and Stokke alongside small baby businesses.",
+   "site": "https://babyandtoddlershow.co.uk/birmingham/",
+   "list": "https://babyandtoddlershow.co.uk/birmingham/shopping/exhibitor-list/",
+   "source": "https://babyandtoddlershow.co.uk/",
+   "sourceName": "babyandtoddlershow.co.uk",
+   "attendance": {
+    "figures": [],
+    "estimate": {
+     "low": 8000,
+     "high": 10500,
+     "unit": "visitors",
+     "how": "About 90 exhibitors on its list, times the 90 to 115 visitors per exhibitor counted at the Baby & Toddler Show’s Glasgow and Sandown Park shows and The Baby Show."
+    },
+    "note": "No count published for Birmingham.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "The Baby Fayre",
+   "edition": "Buxton",
+   "start": "2026-11-01",
+   "end": "2026-11-01",
+   "venue": "Buxton, Derbyshire",
+   "type": "local",
+   "dates": "listing",
+   "who": "Small Sunday fair for local baby businesses, makers and resellers.",
+   "site": "https://www.thebabyfayre.co.uk",
+   "source": "https://eventslist.co.uk/buxton/events/the-baby-fayre-buxton-2026-11-01",
+   "sourceName": "eventslist.co.uk",
+   "attendance": {
+    "figures": [],
+    "note": "Three-hour local fairs. No figures published.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Maternity & Midwifery Festival",
+   "edition": "Edinburgh",
+   "start": "2026-11-25",
+   "end": "2026-11-25",
+   "venue": "Edinburgh",
+   "type": "pro",
+   "dates": "listing",
+   "who": "For midwives and maternity teams. Feeding, baby care and maternity brands exhibit to reach them.",
+   "site": "https://www.maternityandmidwifery.co.uk",
+   "source": "https://eventslist.co.uk/edinburgh/events/edinburgh-maternity-and-midwifery-festival-2026-2026-11-25",
+   "sourceName": "eventslist.co.uk",
+   "attendance": {
+    "figures": [],
+    "note": "No attendance published. One attendee wrote of “over 2,000 midwives” at a 2018 regional festival, which is not a count.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Top Drawer",
+   "edition": "January",
+   "full": "Top Drawer January",
+   "start": "2027-01-10",
+   "end": "2027-01-12",
+   "venue": "Olympia, London",
+   "type": "gift",
+   "dates": "listing",
+   "who": "Gift and lifestyle trade show for independent shops, with a kids and play area.",
+   "site": "https://www.topdrawer.co.uk",
+   "source": "https://www.neventum.com/tradeshows/children/united-kingdom",
+   "sourceName": "Neventum",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2012,
+      "number": 8447,
+      "unit": "visitors",
+      "text": "8,447 visitors (pending ABC audit), September 2012",
+      "basis": "organiser",
+      "source": "https://exhibitionnews.uk/?p=61996",
+      "sourceName": "Exhibition News"
+     },
+     {
+      "year": 2013,
+      "number": 8557,
+      "unit": "retailers",
+      "text": "8557 (pending audit) retailers attended the show over the three days, September 2013",
+      "basis": "organiser",
+      "source": "https://furniturenews.net/event-review/top-drawer-attracts-record-visitor-numbers",
+      "sourceName": "Furniture News"
+     },
+     {
+      "year": 2023,
+      "number": null,
+      "unit": "",
+      "text": "a 10% increase in attendee numbers vs. the same edition last year",
+      "basis": "organiser",
+      "source": "https://www.topdrawer.co.uk/press-releases/topdrawercloses",
+      "sourceName": "Top Drawer"
+     },
+     {
+      "year": 2025,
+      "number": null,
+      "unit": "",
+      "text": "core retailer attendance increase of 20%",
+      "basis": "organiser",
+      "source": "https://www.topdrawer.co.uk/press-releases/top-drawer-aw25-end-of-show",
+      "sourceName": "Top Drawer"
+     },
+     {
+      "year": 2026,
+      "number": 10000,
+      "unit": "retailers a year",
+      "text": "10,000+ Retailers attended each year (both shows)",
+      "basis": "claim",
+      "source": "https://www.topdrawer.co.uk/why-exhibit",
+      "sourceName": "Top Drawer"
+     }
+    ],
+    "estimate": {
+     "low": 8000,
+     "high": 10000,
+     "unit": "visitors",
+     "how": "Its last per-show counts (8,447 and 8,557 in 2012–13), the organiser’s “10,000+ retailers each year” across its two shows, and the growth it has reported since 2023."
+    },
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Toy Fair",
+   "start": "2027-01-19",
+   "end": "2027-01-21",
+   "venue": "Olympia, London",
+   "type": "trade",
+   "dates": "organiser",
+   "who": "The UK toy industry’s trade show, run by the BTHA. Toy, game and hobby brands sell to retailers.",
+   "site": "https://www.toyfair.co.uk",
+   "source": "https://www.toyfair.co.uk/?p=69767",
+   "sourceName": "toyfair.co.uk",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2014,
+      "number": null,
+      "unit": "",
+      "text": "The BTHA does not give out visitor numbers",
+      "basis": "press",
+      "source": "https://exhibitionnews.uk/?p=62955",
+      "sourceName": "Exhibition News"
+     },
+     {
+      "year": 2023,
+      "number": null,
+      "unit": "",
+      "text": "thousands of visitors from around the world",
+      "basis": "press",
+      "source": "https://toyworldmag.co.uk/?p=228321",
+      "sourceName": "Toy World"
+     }
+    ],
+    "note": "The organiser does not publish visitor numbers. Over 250 exhibitors.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Scotland’s Trade Fair",
+   "start": "2027-01-24",
+   "end": "2027-01-26",
+   "venue": "SEC, Glasgow",
+   "type": "gift",
+   "dates": "organiser",
+   "who": "Gift, home, textiles and crafts. Kids and baby gift brands may be among them; check the exhibitor list.",
+   "site": "https://www.scotlandstradefairs.com",
+   "source": "https://gardenforum.co.uk/news/shows/scotlands-trade-fair-confirms-january-2027-dates",
+   "sourceName": "Garden Forum",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2026,
+      "number": null,
+      "unit": "",
+      "text": "several thousand retailers ... Attendance was marginally down",
+      "basis": "organiser",
+      "source": "https://www.giftfocus.com/news/31476/136/scotlands-trade-fair-spring-celebrates-quality-and-variety",
+      "sourceName": "Gift Focus"
+     }
+    ],
+    "note": "ABC-audited from 2006 to 2008; those figures are behind an ABC login. No count published since.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "The Baby Fayre",
+   "edition": "Eastbourne",
+   "start": "2027-01-30",
+   "end": "2027-01-30",
+   "venue": "Kings Church, Eastbourne BN23 6PT",
+   "type": "local",
+   "dates": "listing",
+   "who": "Small fair for local baby businesses, makers and resellers.",
+   "site": "https://www.thebabyfayre.co.uk",
+   "source": "https://eventslist.co.uk/eastbourne/events/the-baby-fayre-eastbourne-2027-01-30",
+   "sourceName": "eventslist.co.uk",
+   "attendance": {
+    "figures": [],
+    "note": "Three-hour local fairs. No figures published.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Spring Fair",
+   "start": "2027-02-07",
+   "end": "2027-02-10",
+   "venue": "NEC, Birmingham",
+   "type": "gift",
+   "dates": "listing",
+   "who": "The UK’s biggest home and gift trade show. Runs alongside Bubble, the kidswear show.",
+   "site": "https://www.springfair.com",
+   "source": "https://retra.co.uk/events/spring-fair-2027/",
+   "sourceName": "Retra",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2010,
+      "number": 71239,
+      "unit": "visitors",
+      "text": "The number of visitors to this year’s Spring Fair International was 71,239 (five days)",
+      "basis": "organiser",
+      "source": "https://housewareslive.net/spring-fair-attendance-best-for-two-years/",
+      "sourceName": "Housewares"
+     },
+     {
+      "year": 2011,
+      "number": 74000,
+      "unit": "visitors",
+      "text": "74,000 visitors over five days (ABC-audited)",
+      "basis": "audited",
+      "source": "https://housewareslive.net/spring-fair-enjoys-a-surge-in-visitor-numbers/",
+      "sourceName": "Housewares"
+     },
+     {
+      "year": 2013,
+      "number": 68116,
+      "unit": "visitors",
+      "text": "over 68,116 visitors ... up 6% (ABC-audited)",
+      "basis": "audited",
+      "source": "https://housewareslive.net/spring-fair-visitor-numbers-up-6/",
+      "sourceName": "Housewares"
+     },
+     {
+      "year": 2015,
+      "number": 63225,
+      "unit": "visitors",
+      "text": "an estimated 63,225 (the final visitor number is subject to ABC)",
+      "basis": "organiser",
+      "source": "https://housewareslive.net/forward-bookings-for-spring-fair-2016-tracking-at-80/",
+      "sourceName": "Housewares"
+     },
+     {
+      "year": 2024,
+      "number": 38000,
+      "unit": "visitors",
+      "text": "Spring Fair has recorded 38,000 visitors at its previous edition (four days)",
+      "basis": "press",
+      "source": "https://fashionunited.uk/news/fairs/scoop-source-and-spring-fair-the-new-landscape-of-the-uks-trade-show-scene/2025012479796",
+      "sourceName": "FashionUnited"
+     },
+     {
+      "year": 2025,
+      "number": 38000,
+      "unit": "visitors",
+      "text": "more than 38,000 retail buyers and industry professionals attended",
+      "basis": "organiser",
+      "source": "https://www.interiordaily.com/article/9703689/75th-edition-of-spring-fair-concluded-at-the-nec-birmingham/",
+      "sourceName": "Interior Daily"
+     },
+     {
+      "year": 2026,
+      "number": 40000,
+      "unit": "visitors",
+      "text": "Welcoming 40,000 visitors from 124 countries",
+      "basis": "organiser",
+      "source": "https://furniturenews.net/event-review/spring-fair-reports-renewed-retail-momentum",
+      "sourceName": "Furniture News"
+     }
+    ],
+    "estimate": {
+     "low": 38000,
+     "high": 42000,
+     "unit": "visitors",
+     "how": "From its last three counts (38,000 in 2024 and 2025, 40,000 in 2026). It ran five days until 2019 and four since 2022, so older figures are not comparable."
+    },
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Bubble",
+   "edition": "at Pure London x Spring Fair",
+   "full": "Bubble at Pure London x Spring Fair",
+   "start": "2027-02-07",
+   "end": "2027-02-10",
+   "venue": "NEC, Birmingham",
+   "type": "trade",
+   "dates": "listing",
+   "who": "Children’s, baby and maternity fashion brands selling to shops.",
+   "site": "https://www.purelondon.com",
+   "source": "https://cantonfair.net/event/5899-bubble-london-2027-at-pure-london-x-spring-fair",
+   "sourceName": "cantonfair.net",
+   "attendance": {
+    "figures": [],
+    "note": "Bubble is now a section of Pure London at Spring Fair, which counted 40,000 visitors in 2026 across all its sections. No kidswear figure has been published since 2012.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "INDX National Kidswear & Kids Footwear",
+   "edition": "February",
+   "full": "INDX Kidswear & Kids Footwear February",
+   "start": "2027-02-14",
+   "end": "2027-02-15",
+   "venue": "Cranmore Park, Solihull",
+   "type": "trade",
+   "dates": "organiser",
+   "who": "Kidswear and children’s footwear brands and agents selling to independent shops.",
+   "site": "https://indxshows.co.uk/shows/kids",
+   "source": "https://aistores.co.uk/news/ais-indx-shows-2027-dates-revealed",
+   "sourceName": "AIS",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2023,
+      "number": 500,
+      "unit": "buyers",
+      "text": "nearly 500 buyers were in attendance (29–30 January 2023)",
+      "basis": "organiser",
+      "source": "https://fashionunited.uk/news/fairs/indx-kids-indie-retailers-upping-children-s-footwear-presence/2023020367692",
+      "sourceName": "FashionUnited"
+     }
+    ],
+    "estimate": {
+     "low": 400,
+     "high": 600,
+     "unit": "buyers",
+     "how": "From its January 2023 count of nearly 500 buyers, with brand numbers steady at 130 to 150 since."
+    },
+    "note": "A listing site claims “12k+ visitors”, which does not fit the organiser’s own figure, so it is left out.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Chippenham Baby Show",
+   "month": "2027-03",
+   "when": "Not set yet (ran 1 Mar 2026)",
+   "venue": "Neeld Community & Arts Centre, Chippenham",
+   "type": "local",
+   "dates": "tbc",
+   "who": "Run by Birth Network North Wiltshire. Business stands were £30 in 2026. Watch for a 2027 date.",
+   "source": "https://wiltshiretogether.org.uk/activity/chippenham-baby-show-2026",
+   "sourceName": "Wiltshire Together",
+   "full": "Chippenham Baby Show 2027",
+   "attendance": {
+    "figures": [],
+    "note": "A three-hour local fair. No figures published.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Childcare & Education Expo",
+   "edition": "London",
+   "start": "2027-03-05",
+   "end": "2027-03-06",
+   "venue": "ExCeL, London",
+   "type": "pro",
+   "dates": "organiser",
+   "who": "Over 130 suppliers selling to nurseries and early-years settings.",
+   "note": "Moved from Olympia for 2027. Some listing sites still say Olympia.",
+   "site": "https://www.childcareeducationexpo.co.uk/london/",
+   "source": "https://exhibitionnews.uk/childcare-education-expo-london-moves-to-excel-for-2027/",
+   "sourceName": "Exhibition News",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2015,
+      "number": 1900,
+      "unit": "visitors",
+      "text": "over 1900 visitors through the doors during the two day event",
+      "basis": "organiser",
+      "source": "https://aeo.org.uk/member-news/eventful-show-childcare-expo",
+      "sourceName": "AEO"
+     },
+     {
+      "year": 2024,
+      "number": 3395,
+      "unit": "visitors",
+      "text": "3395 visitors, 110 exhibitors and 50 speakers in 2024 (a record)",
+      "basis": "organiser",
+      "source": "https://www.mortonmichel.com/news/the-uks-largest-early-education-event-returns-to-london-in-2025",
+      "sourceName": "Morton Michel"
+     }
+    ],
+    "estimate": {
+     "low": 3000,
+     "high": 4000,
+     "unit": "visitors",
+     "how": "From its 2024 record of 3,395. It moves to the larger ExCeL in 2027."
+    },
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "The Baby Show",
+   "edition": "ExCeL London",
+   "start": "2027-03-05",
+   "end": "2027-03-07",
+   "venue": "ExCeL, London",
+   "type": "consumer",
+   "dates": "organiser",
+   "who": "Public baby show: big brands plus independent retailers and small makers.",
+   "note": "cantonfair.net says 26–28 February. The organiser says 5–7 March.",
+   "site": "https://www.thebabyshow.co.uk/excel",
+   "list": "https://www.thebabyshow.co.uk/excel/products/exhibitor-directory",
+   "source": "https://www.thebabyshow.co.uk/excel",
+   "sourceName": "thebabyshow.co.uk",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2022,
+      "number": 22331,
+      "unit": "visitors",
+      "text": "22,331 visitors in 2022 at ExCeL London (research independently conducted by Explori Media Ltd)",
+      "basis": "organiser",
+      "source": "https://thebabyshow.co.uk/manchester/exhibit",
+      "sourceName": "The Baby Show"
+     },
+     {
+      "year": 2023,
+      "number": null,
+      "unit": "",
+      "text": "an 11% rise compared to the previous year",
+      "basis": "organiser",
+      "source": "https://www.thebabyshow.co.uk/blog/baby-show-lidl-gb-excel-london-earns-finalist-spot-best-consumer-show",
+      "sourceName": "The Baby Show"
+     }
+    ],
+    "estimate": {
+     "low": 22000,
+     "high": 26000,
+     "unit": "visitors",
+     "how": "From its 2022 count (22,331) and the 11% rise the organiser reported for 2023 (about 24,800)."
+    },
+    "note": "The organiser also says 80,000 to 85,000 people a year visit its shows in all. Its NEC and ExCeL shows were ABC-audited from 2004 to 2008; those figures are behind an ABC login.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Norfolk Bump & Beyond Baby & Toddler Fair",
+   "start": "2027-03-14",
+   "end": "2027-03-14",
+   "venue": "Norfolk Showground Arena, Norwich",
+   "type": "consumer",
+   "dates": "listing",
+   "who": "Billed as East Anglia’s largest baby show. Regional brands and local baby businesses.",
+   "site": "https://www.bumpandbeyond.co.uk",
+   "source": "https://www.cantonfair.net/event/27505-norfolk-bump-beyond-baby-toddler-fair-east-anglias-largest-baby-show",
+   "sourceName": "cantonfair.net",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2017,
+      "number": 900,
+      "unit": "adults",
+      "text": "900 adults with their bumps and children attend the fair",
+      "basis": "organiser",
+      "source": "https://norwich.mumbler.co.uk/event/bump-beyond-baby-and-toddler-fair-2/",
+      "sourceName": "Mumbler"
+     }
+    ],
+    "note": "One figure, from 2017. Too old to estimate from.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Baby & Toddler Show",
+   "edition": "London",
+   "start": "2027-04-02",
+   "end": "2027-04-04",
+   "venue": "Sandown Park, Esher, Surrey",
+   "type": "consumer",
+   "dates": "organiser",
+   "who": "Public baby show with national brands and small baby businesses.",
+   "note": "The organiser’s page shows 2–4 April without a year. Those dates fall Friday to Sunday in 2027.",
+   "site": "https://babyandtoddlershow.co.uk/london-show/",
+   "list": "https://babyandtoddlershow.co.uk/london-show/shopping/exhibitor-list/",
+   "source": "https://babyandtoddlershow.co.uk/london-show/",
+   "sourceName": "babyandtoddlershow.co.uk",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2025,
+      "number": 13301,
+      "unit": "visitors",
+      "text": "13,301 visitors attended the Sandown Park show",
+      "basis": "organiser",
+      "source": "https://nurserytoday.co.uk/?p=7060",
+      "sourceName": "Nursery Today"
+     }
+    ],
+    "estimate": {
+     "low": 12000,
+     "high": 15000,
+     "unit": "visitors",
+     "how": "From its spring 2025 count of 13,301."
+    },
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Baby & Toddler Show",
+   "edition": "Scotland",
+   "start": "2027-04-16",
+   "end": "2027-04-18",
+   "venue": "SEC, Glasgow",
+   "type": "consumer",
+   "dates": "organiser",
+   "who": "Scotland’s big public baby show, with national brands and small baby businesses.",
+   "site": "https://babyandtoddlershow.co.uk/scotland-show/",
+   "list": "https://babyandtoddlershow.co.uk/scotland-show/exhibitor-list/",
+   "source": "https://babyandtoddlershow.co.uk/scotland-show/",
+   "sourceName": "babyandtoddlershow.co.uk",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2018,
+      "number": 15000,
+      "unit": "visitors",
+      "text": "welcoming over 15,000 visitors to the SEC in Glasgow (its first show; 12,000 were expected)",
+      "basis": "organiser",
+      "source": "https://exhibitionnews.uk/?p=67299",
+      "sourceName": "Exhibition News"
+     },
+     {
+      "year": 2025,
+      "number": 17534,
+      "unit": "visitors",
+      "text": "a record-breaking 17,534 visitors",
+      "basis": "organiser",
+      "source": "https://nurserytoday.co.uk/?p=7060",
+      "sourceName": "Nursery Today"
+     }
+    ],
+    "estimate": {
+     "low": 15000,
+     "high": 18000,
+     "unit": "visitors",
+     "how": "From its counts of over 15,000 (2018) and 17,534 (2025, a record)."
+    },
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "The Baby Fayre",
+   "edition": "Northampton",
+   "start": "2027-04-18",
+   "end": "2027-04-18",
+   "venue": "Moulton Community Centre, Northampton NN3 7AX",
+   "type": "local",
+   "dates": "listing",
+   "who": "Small Sunday fair for local baby businesses, makers and resellers.",
+   "site": "https://www.thebabyfayre.co.uk",
+   "source": "https://eventslist.co.uk/northampton/events/the-baby-fayre-northampton-2027-04-18",
+   "sourceName": "eventslist.co.uk",
+   "attendance": {
+    "figures": [],
+    "note": "Three-hour local fairs. No figures published.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Yorkshire Baby Show",
+   "edition": "Spring",
+   "full": "Yorkshire Baby Show Spring",
+   "start": "2027-04-24",
+   "end": "2027-04-24",
+   "venue": "The Pavilions, Great Yorkshire Events Centre, Harrogate",
+   "type": "consumer",
+   "dates": "organiser",
+   "who": "Regional baby show: small local brands and household names. Stand enquiries through the site.",
+   "note": "The organiser’s page says Saturday 24 April without a year; that is a Saturday in 2027.",
+   "site": "https://yorkshirebabyshow.co.uk",
+   "source": "https://yorkshirebabyshow.co.uk",
+   "sourceName": "yorkshirebabyshow.co.uk",
+   "attendance": {
+    "figures": [],
+    "note": "A one-day regional show. No figures published.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "The Baby Show",
+   "edition": "NEC Birmingham",
+   "start": "2027-05-07",
+   "end": "2027-05-09",
+   "venue": "NEC, Birmingham",
+   "type": "consumer",
+   "dates": "organiser",
+   "who": "Public baby show: big brands plus independent retailers and small makers.",
+   "site": "https://www.thebabyshow.co.uk/nec",
+   "list": "https://www.thebabyshow.co.uk/nec/products/exhibitor-directory",
+   "listLabel": "2026 exhibitors",
+   "source": "https://www.thebabyshow.co.uk/nec",
+   "sourceName": "thebabyshow.co.uk",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2022,
+      "number": 23716,
+      "unit": "visitors",
+      "text": "23,716 visitors in 2022 at NEC Birmingham (research independently conducted by Explori Media Ltd)",
+      "basis": "organiser",
+      "source": "https://thebabyshow.co.uk/manchester/exhibit",
+      "sourceName": "The Baby Show"
+     }
+    ],
+    "estimate": {
+     "low": 22000,
+     "high": 26000,
+     "unit": "visitors",
+     "how": "From its 2022 count (23,716) and the organiser’s forecasts of over 25,000 for its other shows."
+    },
+    "note": "The organiser also says 80,000 to 85,000 people a year visit its shows in all. Its NEC and ExCeL shows were ABC-audited from 2004 to 2008; those figures are behind an ABC login.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Nursery World’s Big Day Out",
+   "start": "2027-05-14",
+   "end": "2027-05-14",
+   "venue": "Business Design Centre, London",
+   "type": "pro",
+   "dates": "listing",
+   "who": "Early-years festival for nursery staff and leaders, with suppliers exhibiting.",
+   "site": "https://www.nurseryworldsbigdayout.com",
+   "source": "https://www.cantonfair.net/event/5985-nursery-world-show",
+   "sourceName": "cantonfair.net",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2019,
+      "number": 3500,
+      "unit": "visitors",
+      "text": "nearly 3,500 visitors (the Nursery World Show, two days)",
+      "basis": "organiser",
+      "source": "https://nurseryworld.co.uk/content/news/nursery-world-show-2018-all-under-one-roof",
+      "sourceName": "Nursery World"
+     },
+     {
+      "year": 2020,
+      "number": 3000,
+      "unit": "visitors",
+      "text": "more than 3,000 visitors from across the sector poured through the doors",
+      "basis": "organiser",
+      "source": "https://nurseryworld.co.uk/news/article/nursery-world-show-2020-early-years-in-action",
+      "sourceName": "Nursery World"
+     }
+    ],
+    "estimate": {
+     "low": 2500,
+     "high": 3500,
+     "unit": "visitors",
+     "how": "From its counts as the two-day Nursery World Show (3,000 to 3,500). It became a one-day festival in 2025, so this is rough."
+    },
+    "note": "The 2019 article’s title says 2018; its text says 2019.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Toymaster May Show",
+   "month": "2027-05",
+   "when": "May 2027",
+   "venue": "Majestic Hotel grounds, Harrogate",
+   "type": "trade",
+   "dates": "tbc",
+   "who": "Buying show for Toymaster’s independent toy shops. Over 100 suppliers; stands sold out in 2026 (19–21 May).",
+   "site": "https://join.toymaster.co.uk/",
+   "source": "https://www.toysnplaythings.media/the-toymaster-2026-may-show-is-sold-out/",
+   "sourceName": "Toys n Playthings",
+   "full": "Toymaster May Show 2027",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2025,
+      "number": null,
+      "unit": "",
+      "text": "120 non-members registered ahead of the show, around double the usual number",
+      "basis": "press",
+      "source": "https://globaltoynews.com/2025/05/23/i-bet-you-look-good-on-the-dancefloor-its-the-friday-blog-with-john-baulch/",
+      "sourceName": "Global Toy News"
+     }
+    ],
+    "note": "No total published. A buying show for Toymaster’s 250+ member shops, plus non-members who register.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Baby & Toddler Show",
+   "edition": "Manchester",
+   "start": "2027-05-28",
+   "end": "2027-05-30",
+   "venue": "AO Arena, Manchester",
+   "type": "consumer",
+   "dates": "organiser",
+   "who": "Public baby show for the North West, with national brands and small baby businesses.",
+   "note": "The organiser’s page shows 28–30 May without a year. Those dates fall Friday to Sunday in 2027. Its exhibitor list page still names Manchester Central, so check the venue too.",
+   "site": "https://babyandtoddlershow.co.uk/north-west-show/",
+   "list": "https://babyandtoddlershow.co.uk/north-west-show/shopping/exhibitors-list/",
+   "source": "https://babyandtoddlershow.co.uk/north-west-show/",
+   "sourceName": "babyandtoddlershow.co.uk",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2014,
+      "number": 11091,
+      "unit": "visitors",
+      "text": "11,091 visitors ... an annual rise of 2.4 per cent (unaudited), at EventCity",
+      "basis": "organiser",
+      "source": "https://exhibitionnews.uk/baby-and-wedding-shows-attract-more-than-17000-visitors-to-eventcity/",
+      "sourceName": "Exhibition News"
+     }
+    ],
+    "estimate": {
+     "low": 11000,
+     "high": 17000,
+     "unit": "visitors",
+     "how": "Its last count (11,091 in 2014, at a different venue) and 150+ brands times the 90 to 115 visitors per exhibitor seen at its other shows. Rough."
+    },
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "INDX National Kidswear & Kids Footwear",
+   "edition": "July",
+   "full": "INDX Kidswear & Kids Footwear July",
+   "start": "2027-07-04",
+   "end": "2027-07-05",
+   "venue": "Cranmore Park, Solihull",
+   "type": "trade",
+   "dates": "organiser",
+   "who": "Kidswear and children’s footwear brands and agents selling to independent shops.",
+   "site": "https://indxshows.co.uk/shows/kids",
+   "source": "https://aistores.co.uk/news/ais-indx-shows-2027-dates-revealed",
+   "sourceName": "AIS",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2023,
+      "number": 500,
+      "unit": "buyers",
+      "text": "nearly 500 buyers were in attendance (29–30 January 2023)",
+      "basis": "organiser",
+      "source": "https://fashionunited.uk/news/fairs/indx-kids-indie-retailers-upping-children-s-footwear-presence/2023020367692",
+      "sourceName": "FashionUnited"
+     }
+    ],
+    "estimate": {
+     "low": 400,
+     "high": 600,
+     "unit": "buyers",
+     "how": "From its January 2023 count of nearly 500 buyers, with brand numbers steady at 130 to 150 since."
+    },
+    "note": "A listing site claims “12k+ visitors”, which does not fit the organiser’s own figure, so it is left out.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Home & Gift Buyers’ Festival",
+   "start": "2027-07-18",
+   "end": "2027-07-21",
+   "venue": "Harrogate Convention Centre, Harrogate",
+   "type": "gift",
+   "dates": "listing",
+   "who": "Trade-only gift and home show for independent shops. Some kids and baby gift brands.",
+   "site": "https://www.homeandgift.co.uk",
+   "source": "https://www.harrogateconventioncentre.co.uk/whats-on/home-gift-buyers-festival-2027-trade-only",
+   "sourceName": "Harrogate Convention Centre",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2013,
+      "number": 12000,
+      "unit": "expected",
+      "text": "More than 12,000 retail buyers are expected to attend",
+      "basis": "claim",
+      "source": "https://housewareslive.net/one-week-to-home-gift-show-harrogate/",
+      "sourceName": "Housewares"
+     },
+     {
+      "year": 2015,
+      "number": 12000,
+      "unit": "buyers a year",
+      "text": "attracting around 12,000 retail buyers each year",
+      "basis": "claim",
+      "source": "https://furniturenews.net/event-preview/home-gift-harrogate",
+      "sourceName": "Furniture News"
+     }
+    ],
+    "estimate": {
+     "low": 5000,
+     "high": 7000,
+     "unit": "buyers",
+     "how": "“12,000 buyers a year” was claimed when it had 1,000+ exhibitors. It now has about 500, so scaled to about half. Rough."
+    },
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Autumn Fair",
+   "start": "2027-09-05",
+   "end": "2027-09-08",
+   "venue": "NEC, Birmingham",
+   "type": "gift",
+   "dates": "listing",
+   "who": "Big home and gift trade show with a Kids, Toys & Play section.",
+   "site": "https://www.autumnfair.com",
+   "source": "https://www.luminik.io/events/autumn-fair-birmingham-b11831e6b278/",
+   "sourceName": "Luminik",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2014,
+      "number": 29000,
+      "unit": "visitors",
+      "text": "more than 29,000 (pending audit) visitors",
+      "basis": "organiser",
+      "source": "https://www.furniturenews.net/event-review/autumn-fair-records-increased-footfall",
+      "sourceName": "Furniture News"
+     },
+     {
+      "year": 2024,
+      "number": 12000,
+      "unit": "buyers",
+      "text": "welcome over 12,000 buyers this week (said on its second day)",
+      "basis": "claim",
+      "source": "https://furniturenews.net/event-review/autumn-fair-reports-upbeat-start",
+      "sourceName": "Furniture News"
+     },
+     {
+      "year": 2025,
+      "number": 12000,
+      "unit": "visitors",
+      "text": "circa 12,000 visitors",
+      "basis": "listing",
+      "source": "https://www.thenec.co.uk/whats-on/autumn-fair",
+      "sourceName": "The NEC"
+     },
+     {
+      "year": 2026,
+      "number": 13000,
+      "unit": "expected",
+      "text": "around 13,000+ buyers (Autumn Fair alone; 20,000+ with Glee alongside)",
+      "basis": "claim",
+      "source": "https://www.giftfocus.com/news/31806/136/registration-opens-for-autumn-fair-2026",
+      "sourceName": "Gift Focus"
+     }
+    ],
+    "estimate": {
+     "low": 12000,
+     "high": 14000,
+     "unit": "visitors",
+     "how": "From about 12,000 in 2024 and 2025 and the 13,000+ expected for 2026. Exhibitors fell from about 1,400 (2014) to about 800, so the 2014 figure is not comparable."
+    },
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Childcare & Education Expo",
+   "edition": "National",
+   "start": "2027-10-01",
+   "end": "2027-10-02",
+   "venue": "Coventry Building Society Arena, Coventry",
+   "type": "pro",
+   "dates": "listing",
+   "who": "Suppliers selling to nurseries and early-years settings.",
+   "site": "https://www.childcareeducationexpo.co.uk",
+   "source": "https://www.luminik.io/events/childcare-education-expo-national-coventry-199cc814211a/",
+   "sourceName": "Luminik",
+   "attendance": {
+    "figures": [],
+    "note": "No count published for the Coventry show.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Yorkshire Baby Show",
+   "edition": "Autumn",
+   "full": "Yorkshire Baby Show Autumn 2027",
+   "month": "2027-10",
+   "when": "Autumn 2027",
+   "venue": "The Pavilions, Harrogate",
+   "type": "consumer",
+   "dates": "tbc",
+   "who": "Runs spring and autumn; the 2026 autumn show was 3 October. Booking page for autumn exhibitors is on the site.",
+   "site": "https://yorkshirebabyshow.co.uk",
+   "source": "https://pavilionsofharrogate.co.uk/?p=361237",
+   "sourceName": "Pavilions of Harrogate",
+   "attendance": {
+    "figures": [],
+    "note": "A one-day regional show. No figures published.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Harrogate International Nursery Fair",
+   "edition": "2027",
+   "full": "Harrogate International Nursery Fair 2027",
+   "month": "2027-10",
+   "when": "October 2027",
+   "venue": "Harrogate Convention Centre, Harrogate",
+   "type": "trade",
+   "dates": "tbc",
+   "who": "The UK’s only dedicated nursery trade show. The organiser says 2027 dates are secured but hasn’t published them.",
+   "site": "https://www.nurseryfair.com",
+   "source": "https://nurserytoday.co.uk/2026/02/03/booking-open-for-the-uks-only-nursery-trade-show/",
+   "sourceName": "Nursery Today",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2022,
+      "number": null,
+      "unit": "",
+      "text": "Visitor numbers were up on last year",
+      "basis": "organiser",
+      "source": "https://nurserytoday.co.uk/?p=4151",
+      "sourceName": "Nursery Today"
+     },
+     {
+      "year": 2023,
+      "number": null,
+      "unit": "",
+      "text": "an increase in attendance of over 20% across the three October shows (2021 to 2023)",
+      "basis": "organiser",
+      "source": "https://www.nurseryfair.com/press/HINF-after-show-PR-23-Oct-23_m.pdf",
+      "sourceName": "Organiser press release"
+     },
+     {
+      "year": 2026,
+      "number": null,
+      "unit": "",
+      "text": "91.8% of visitors are buyers",
+      "basis": "organiser",
+      "source": "https://www.nurseryfair.com/pdfs/HINF-2026-Brochure-FINAL-h_m.pdf",
+      "sourceName": "Organiser brochure"
+     }
+    ],
+    "note": "The organiser publishes trends and who visits, not a headcount. Over 100 exhibitors and 200 brands.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "The Baby Show",
+   "edition": "Olympia London",
+   "month": "2027-10",
+   "when": "October 2027",
+   "venue": "Olympia, London",
+   "type": "consumer",
+   "dates": "tbc",
+   "who": "Held at Olympia every October for over 25 years. 2027 dates not out yet.",
+   "site": "https://www.thebabyshow.co.uk/olympia",
+   "source": "https://www.thebabyshow.co.uk/news/baby-show-sponsored-pampers-olympia-london-celebrates-25-years-uks-favourite-baby-parenting-event",
+   "sourceName": "thebabyshow.co.uk",
+   "full": "The Baby Show Olympia London 2027",
+   "attendance": {
+    "figures": [
+     {
+      "year": 2022,
+      "number": 23224,
+      "unit": "visitors",
+      "text": "23,224 visitors in 2022 at Olympia London (research independently conducted by Explori Media Ltd)",
+      "basis": "organiser",
+      "source": "https://thebabyshow.co.uk/manchester/exhibit",
+      "sourceName": "The Baby Show"
+     },
+     {
+      "year": 2024,
+      "number": 25000,
+      "unit": "expected",
+      "text": "Over 25,000 people will descend on London",
+      "basis": "claim",
+      "source": "https://www.thebabyshow.co.uk/news/baby-show-lidl-gb-uks-ultimate-pregnancy-parenting-show-returns-olympia-london-25th-27th-october",
+      "sourceName": "The Baby Show"
+     },
+     {
+      "year": 2025,
+      "number": 25000,
+      "unit": "expected",
+      "text": "Over 25,000 people will descend to the show across the three days",
+      "basis": "claim",
+      "source": "https://www.thebabyshow.co.uk/news/baby-show-returns-olympia-london-uks-biggest-best-pregnancy-parenting-show-back-24th-26th-october-2025",
+      "sourceName": "The Baby Show"
+     }
+    ],
+    "estimate": {
+     "low": 22000,
+     "high": 26000,
+     "unit": "visitors",
+     "how": "From its last count (23,224 in 2022) up to the organiser’s own forecast of over 25,000."
+    },
+    "note": "The organiser also says 80,000 to 85,000 people a year visit its shows in all. Its NEC and ExCeL shows were ABC-audited from 2004 to 2008; those figures are behind an ABC login.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "The Baby Fayre",
+   "edition": "more towns",
+   "month": "2027-99",
+   "when": "Through 2027",
+   "venue": "Kent, East Sussex, Worthing, Canterbury, Huntingdon, Peterborough, St Helens, Hoylake, Newport and more",
+   "type": "local",
+   "dates": "tbc",
+   "who": "Ran in all these towns in 2026. New dates appear on Eventbrite and eventslist.co.uk a few months ahead.",
+   "site": "https://www.thebabyfayre.co.uk",
+   "source": "https://eventslist.co.uk/northampton/events/the-baby-fayre-northampton-2027-04-18",
+   "sourceName": "eventslist.co.uk",
+   "series": true,
+   "attendance": {
+    "figures": [],
+    "note": "Three-hour local fairs. No figures published.",
+    "checked": "2026-10-27"
+   }
+  },
+  {
+   "name": "Maternity & Midwifery Festivals",
+   "edition": "more cities",
+   "month": "2027-99",
+   "when": "Through 2027",
+   "venue": "London, Bradford, Cardiff, Edinburgh and more",
+   "type": "pro",
+   "dates": "tbc",
+   "who": "A touring series for midwives; 2026 ran in Bradford (June), Cardiff (September) and Edinburgh (November). Baby and feeding brands exhibit.",
+   "site": "https://www.maternityandmidwifery.co.uk",
+   "source": "https://eventslist.co.uk/cardiff/events/cardiff-maternity-midwifery-festival-2026-2026-09-23",
+   "sourceName": "eventslist.co.uk",
+   "series": true,
+   "attendance": {
+    "figures": [],
+    "note": "No attendance published. One attendee wrote of “over 2,000 midwives” at a 2018 regional festival, which is not a count.",
+    "checked": "2026-10-27"
+   }
+  }
+ ]
+}

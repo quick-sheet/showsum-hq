@@ -1,9 +1,9 @@
-/* Showsum HQ · app (release 5: autopilot; Inbox; batches; live Overview and Customers; shell, sign-in, Launchpad, Settings) */
+/* Showsum HQ · app (release 7: Exhibitors and Go; release 6: one business, not one row; autopilot; Inbox; batches; live Overview and Customers; shell, sign-in, Launchpad, Settings) */
 (function () {
   'use strict';
 
-  var APP_VERSION = 6;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
-  var EXPECT_BUILD = 6;      // the HQ Apps Script release this app expects
+  var APP_VERSION = 7;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
+  var EXPECT_BUILD = 7;      // the HQ Apps Script release this app expects
   var LS = { config: 'hq.config', links: 'hq.links', user: 'hq.user', name: 'hq.name' };
   var SS_TOKEN = 'hq.idToken';
   var GSI_SRC = 'https://accounts.google.com/gsi/client';
@@ -29,6 +29,7 @@
   var I = {
     overview: svg('<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>'),
     sectors: svg('<path d="M12 3 2 8l10 5 10-5-10-5Z"/><path d="m2 13 10 5 10-5"/><path d="m2 17.5 10 5 10-5"/>'),
+    exhibitors: svg('<path d="M3 21V9l9-6 9 6v12"/><path d="M8 21v-7h8v7"/><path d="M8 17.5h8"/>'),
     inbox: svg('<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13l3.5 7v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6l3.5-7Z"/>'),
     customers: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c2 .7 3.2 2.4 3.6 5.2"/>'),
     launchpad: svg('<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/>'),
@@ -47,8 +48,10 @@
     download: svg('<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>')
   };
 
+  // A fourth item is a page of its own (Exhibitors is the Exhibitor Leads app inside HQ), not a route here.
   var NAV = [
     ['overview', 'Overview', I.overview],
+    ['exhibitors', 'Exhibitors', I.exhibitors, 'exhibitors/'],
     ['sectors', 'Sectors', I.sectors],
     ['inbox', 'Inbox', I.inbox],
     ['customers', 'Customers', I.customers],
@@ -112,7 +115,7 @@
   }
   function uid() { return Math.random().toString(36).slice(2, 12).replace(/[^a-z0-9]/g, 'x').padEnd(10, 'x'); }
 
-  function toast(msg, bad) {
+  function toast(msg, bad, ms) {
     var box = $('#toasts');
     if (!box) return;
     var el = document.createElement('div');
@@ -120,7 +123,7 @@
     el.setAttribute('role', bad ? 'alert' : 'status');
     el.textContent = msg;
     box.appendChild(el);
-    setTimeout(function () { el.remove(); }, bad ? 6000 : 3200);
+    setTimeout(function () { el.remove(); }, ms || (bad ? 6000 : 3200));
   }
 
   function HqError(message, kind) { this.message = message; this.kind = kind; }
@@ -192,17 +195,28 @@
   function signOut() {
     var done = function () {
       try { if (window.google && google.accounts && google.accounts.id) google.accounts.id.disableAutoSelect(); } catch (e) { /* ignore */ }
-      S.token = null; S.claims = null; S.user = null; S.links = null; S.status = null; S.ov = null; S.cu = null; S.ib = null; S.bm = {}; S.gen++;
+      S.token = null; S.claims = null; S.user = null; S.links = null; S.status = null; S.ov = null; S.cu = null; S.ib = null; S.bm = {}; S.elUrl = ''; S.gen++;
       sset(SS_TOKEN, null);
       store(LS.user, null); store(LS.links, null);
       renderSignin();
     };
-    // End the sign-in on the server too, so it can't be reused even if it were copied. Don't wait long.
+    // End the sign-in on the servers too (HQ's script and Exhibitor Leads), so it can't be reused even if it were copied.
+    // Don't wait long.
     if (S.token && tokenOk(S.token, 10)) {
       var t = setTimeout(done, 4000), once = false;
       var fin = function () { if (!once) { once = true; clearTimeout(t); done(); } };
-      call('signout', {}, { timeout: 4000, noReauth: true }).then(fin, fin);
+      var ends = [call('signout', {}, { timeout: 4000, noReauth: true }).catch(function () { /* done anyway */ })];
+      if (S.elUrl) ends.push(elSignout(S.elUrl, S.token));
+      Promise.all(ends).then(fin, fin);
     } else done();
+  }
+
+  /** Ends this sign-in at Exhibitor Leads (its release 19 remembers checked sign-ins, as HQ's script does). */
+  function elSignout(url, token) {
+    var ctl = new AbortController();
+    var timer = setTimeout(function () { ctl.abort(); }, 4000);
+    return fetch(url, { method: 'POST', body: JSON.stringify({ action: 'signout', idToken: token }), signal: ctl.signal, redirect: 'follow', credentials: 'omit' })
+      .then(function () { clearTimeout(timer); }, function () { clearTimeout(timer); });
   }
 
   // ------------------------------------------------------------------------------------------------ talking to the HQ script
@@ -315,6 +329,7 @@
       S.offline = false;
       S.user = j.user; store(LS.user, j.user);
       S.hqName = j.hqName || ''; store(LS.name, S.hqName);
+      S.elUrl = URL_RE.test(j.elUrl || '') ? j.elUrl : '';   // memory only: so signing out ends the sign-in there too
       S.props = j.props;
       if (!S.editing) { S.links = j.links; store(LS.links, j.links); }
       renderShell(); renderRoute();
@@ -324,7 +339,58 @@
       setBanner('error:' + e.message);
     });
     if (!S.tick) S.tick = setInterval(keepSignedIn, 60000);
+    if (!S.pulseTimer) S.pulseTimer = setInterval(pulseTick, 30000);
   }
+
+  // ------------------------------------------------------------------------------------------------ autopilot, as it happens (release 7)
+  // While autopilot is sending (Live or a dry run, in its window), the Overview asks the script every 30 seconds for the
+  // HQ settings tab's few values; when a run lands it reloads at once and says what went. Never asks you to sign in for it.
+  function apSending(ap) {
+    return !!(ap && ap.installed && ((ap.mode !== 'off' && ap.window && ap.window.open) || ap.dryAsked));
+  }
+  function nextRunText(ap) {
+    if (!ap || !ap.ticking || !ap.lastTick) return '';
+    if (!((ap.mode === 'live' && ap.window && ap.window.open && ap.total) || ap.dryAsked)) return '';
+    if (ap.mode === 'live' && ap.check === 'Waiting' && !ap.dryAsked) return 'Waiting for your check.';
+    var mins = Math.ceil((Date.parse(ap.lastTick) + 10 * 60000 - Date.now()) / 60000);
+    return mins <= 0 ? 'Next run any moment.' : 'Next run in about ' + plural(mins, 'minute') + '.';
+  }
+  function updateCountdown() {
+    var el = $('#ap-next');
+    if (el && S.ov && S.ov.autopilot) el.textContent = nextRunText(S.ov.autopilot);
+  }
+  function announceRun(was, now) {
+    if (now.lastRun && now.lastRun !== was.lastRun) {
+      if (/ · Stopped: /.test(now.lastRun)) { toast('Autopilot switched itself off: ' + now.lastRun.split(' · Stopped: ')[1], true, 12000); return; }
+      var m = /(\d{1,2}:\d{2}) · (.*)$/.exec(now.lastRun);
+      var what = m ? m[1] + ' · ' + m[2] : now.lastRun;
+      toast('Autopilot ' + what.replace(/\s*Check them in Gmail Sent.*$/, '').slice(0, 180), false, 9000);
+    }
+    if (now.check === 'Waiting' && was.check !== 'Waiting' && now.mode === 'live') toast('The first emails have gone: check them in Gmail Sent, then press Continue.', false, 12000);
+  }
+  function pulseTick() {
+    updateCountdown();
+    var ap = S.ov && S.ov.autopilot;
+    if (S.route !== 'overview' || !apSending(ap) || S.busy.ov || S.busy.pulse || document.hidden || S.waiters.length) return;
+    if (!S.token || !tokenOk(S.token, 120)) return;
+    S.busy.pulse = true;
+    var gen = S.gen;
+    call('pulse', {}, { timeout: 20000, noReauth: true }).then(function (j) {
+      S.busy.pulse = false;
+      var cur = S.ov && S.ov.autopilot, p = j.pulse;
+      if (gen !== S.gen || !cur || !p) return;
+      var changed = p.lastRun !== cur.lastRun || p.check !== cur.check || p.mode !== cur.mode || p.dryAsked !== cur.dryAsked || p.ticking !== cur.ticking;
+      var was = { lastRun: cur.lastRun, check: cur.check };
+      cur.lastTick = p.lastTick; cur.ticking = p.ticking; cur.window = p.window;
+      updateCountdown();
+      if (changed) { announceRun(was, p); fetchOverview(true); }
+    }, function () { S.busy.pulse = false; });
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden || !S.token) return;
+    // back on the page: catch up at once rather than at the next tick
+    if (S.route === 'overview' && S.ov && !S.busy.ov && Date.now() - (S.ovAt || 0) > (apSending(S.ov.autopilot) ? 30000 : 5 * 60000) && tokenOk(S.token, 120)) fetchOverview(true);
+  });
 
   function keepSignedIn() {
     if (document.hidden || !S.token || S.waiters.length) return;
@@ -432,7 +498,7 @@
   function routeFromHash() {
     var m = /^#\/([a-z]+)/.exec(location.hash || '');
     var r = m && m[1];
-    return NAV.some(function (n) { return n[0] === r; }) ? r : 'overview';
+    return NAV.some(function (n) { return n[0] === r && !n[3]; }) ? r : 'overview';
   }
 
   function onHash() {
@@ -453,10 +519,11 @@
       ? '<span class="avatar" title="' + esc(S.user.email || '') + '"><img src="' + esc(S.user.picture) + '" alt="" referrerpolicy="no-referrer"></span>'
       : '<span class="avatar" aria-hidden="true">' + esc(callMe().charAt(0).toUpperCase()) + '</span>';
     var navA = function (n, cls) {
-      var cur = S.route === n[0] ? ' aria-current="page"' : '';
+      var cur = S.route === n[0] && !n[3] ? ' aria-current="page"' : '';
+      var href = n[3] || '#/' + n[0];
       return cls === 'rail'
-        ? '<a class="nav-a" href="#/' + n[0] + '" title="' + n[1] + '" aria-label="' + n[1] + '"' + cur + '>' + n[2] + '</a>'
-        : '<a href="#/' + n[0] + '"' + cur + '><span class="ic">' + n[2] + '</span>' + n[1] + '</a>';
+        ? '<a class="nav-a" href="' + href + '" title="' + n[1] + '" aria-label="' + n[1] + '"' + cur + '>' + n[2] + '</a>'
+        : '<a href="' + href + '"' + cur + '><span class="ic">' + n[2] + '</span>' + n[1] + '</a>';
     };
     if (!$('#shell')) {
       $('#app').innerHTML =
@@ -590,7 +657,7 @@
     ['Sectors', 'Lines, show lists, your turn'],
     ['Phone', 'Polish for your phone']
   ];
-  var DONE_STEPS = 5;
+  var DONE_STEPS = 6;
 
   // Your turn: what each next action means, in the order they're shown. First emails are left for batches (step 3).
   var TURN = [
@@ -606,7 +673,7 @@
     ['Check earlier row', 'Already in the sheet from another show: check the earlier row.'],
     ['Ask before emailing', 'Sole trader or no consent yet: ask before emailing.'],
     ['Find contact details', 'No email address yet.'],
-    ['Check Companies House', 'P3 and P4: confirm the company before emailing. Step 6 brings these checks into HQ.'],
+    ['Check Companies House', 'P3 and P4: confirm the company before emailing. Open Exhibitors to decide each one.'],
     ['Post a letter', 'Reach them by post instead.'],
     ['Leaflet if passing', 'P5: a leaflet if you pass their stand.']
   ];
@@ -819,8 +886,9 @@
     }).concat(items.map(function (t) {
       var where = t.shows.map(function (s) { return s.name + (t.shows.length > 1 ? ' ' + s.count : ''); }).join(' · ');
       var late = dayDiff(t.oldest) < 0 ? ' Due since ' + fmtDay(t.oldest) + '.' : ' Due today.';
-      return '<article class="ticket"><span class="t-top"><span class="round">' + t.count + '</span><span class="t-tag">' + esc(where.toUpperCase()) + '</span></span>' +
-        '<b class="t-title">' + esc(t.action) + '</b><span class="t-sub">' + esc(hint(t.action) + late) + '</span></article>';
+      var tag = t.action === 'Check Companies House' ? ['a', ' href="exhibitors/"'] : ['article', ''];
+      return '<' + tag[0] + ' class="ticket"' + tag[1] + '><span class="t-top"><span class="round">' + t.count + '</span><span class="t-tag">' + esc(where.toUpperCase()) + '</span></span>' +
+        '<b class="t-title">' + esc(t.action) + '</b><span class="t-sub">' + esc(hint(t.action) + late) + '</span></' + tag[0] + '>';
     })).join('');
     var ap = o.autopilot || {};
     var due = (o.batches || []).filter(function (b) { return b.dueNow && MENU_HOW[b.stage] && b.status !== 'Started'; });
@@ -864,7 +932,7 @@
       return '<div class="stop ' + cls + '" title="' + esc(s[1]) + '"><span class="st"></span><small>STEP ' + (i + 1) + '</small><span class="t">' + esc(s[0]) + '</span></div>';
     }).join('');
     return '<section class="panel" aria-labelledby="ov-line"><div class="panel-head"><div><span class="eyebrow">Build</span><h2 class="h3" id="ov-line">The HQ line</h2>' +
-      '<span class="sub small">Each stop is one release. Next: exhibitors in HQ, Go for new shows and the fast lane.</span></div></div>' +
+      '<span class="sub small">Each stop is one release. Next: sector journeys, a line per sector with its show lists and your turn.</span></div></div>' +
       '<div class="line-track" role="list">' + stops + '</div></section>';
   }
 
@@ -1030,10 +1098,9 @@
 
   function pageSoon(which) {
     var p = {
-      sectors: ['Sectors', 6, 'Shows, exhibitors and sector lines', [
-        'Everything the Exhibitor Leads app does: shows, exhibitors, checks, Why this result?, Find on Companies House, rechecks and CSV.',
-        'Go for new shows, with a fast lane for confirmed limited companies on Google Workspace or Microsoft 365.',
-        'Then a line per sector, with your turn steps and show lists (step 7).']]
+      sectors: ['Sectors', 7, 'Sector journeys', [
+        'A line per sector, with its shows, your turn steps and how each show is going.',
+        'Shows, exhibitors, Companies House checks and Go are on the Exhibitors page now.']]
     }[which];
     return head('ARRIVES IN STEP ' + p[1], p[0], esc(p[2]) + '.') +
       '<section class="panel"><span class="tag">STEP ' + p[1] + '</span><div class="soon"><ul>' +
@@ -1071,7 +1138,7 @@
     }).join('');
     var head = '<div class="panel-head"><div><span class="eyebrow">Autopilot</span><h2 class="h2" id="ap-h">' +
       (ap.mode === 'live' ? 'Autopilot is Live' : ap.mode === 'dry' ? 'Autopilot: dry run' : 'Autopilot is off') + '</h2>' +
-      '<span class="sub small">' + esc(apWhen(ap.window)) + ' Today ' + ap.sentToday + ' of ' + ap.limit + ' sent.</span></div>' +
+      '<span class="sub small">' + esc(apWhen(ap.window)) + ' Today ' + ap.sentToday + ' of ' + ap.limit + ' sent. <span id="ap-next">' + esc(nextRunText(ap)) + '</span></span></div>' +
       '<div class="segs" role="group" aria-label="Autopilot">' + modes + '</div></div>';
     var warn = '';
     if (!ap.ticking) warn = ap.lastTick
