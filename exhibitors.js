@@ -787,6 +787,7 @@ async function setCanEmail(r, value, expect, quiet) {
   const pr = pipeRow(r);
   if (!pr || pr.can !== expect || (value === 'Yes (Ltd)' && pr.touches)) return false;
   const j = await hq('setCanEmail', { code: pr.code, value, expect });
+  api.overviewStale();
   const ce = j.canEmail || {};
   pr.can = value; if (ce.priority) pr.priority = ce.priority;
   const d = pipeData(r.showId), bucket = (v) => (v === 'Yes (Ltd)' ? 'canEmail' : v === 'Check' ? 'check' : 'consent');
@@ -834,7 +835,8 @@ async function submitGo(f) {
   if (going !== undefined) body.going = going;
   await withBusy(f.querySelector('[type=submit]'), async () => {
     let j;
-    try { j = await hq('goShow', body, 170000); } catch (e) { toast(errText(e), true, 8000); return; }
+    try { j = await hq('goShow', body, 170000); } catch (e) { api.overviewStale(); toast(errText(e), true, 8000); return; }
+    api.overviewStale();
     openGoResult(s, j, body.fast);
     loadPipe(id); loadPipeAll(true);
   });

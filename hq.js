@@ -1,9 +1,9 @@
-/* Showsum HQ · app (release 8: Exhibitors as a section of HQ, Sectors folded in; release 7: Exhibitors and Go; release 6: one business, not one row; autopilot; Inbox; batches; live Overview and Customers; shell, sign-in, Launchpad, Settings) */
+/* Showsum HQ · app (release 9: the sending window from HQ, Keep going today, the watch; release 8: Exhibitors as a section of HQ, Sectors folded in; release 7: Exhibitors and Go; release 6: one business, not one row; autopilot; Inbox; batches; live Overview and Customers; shell, sign-in, Launchpad, Settings) */
 (function () {
   'use strict';
 
-  var APP_VERSION = 8;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
-  var EXPECT_BUILD = 8;      // the HQ Apps Script release this app expects
+  var APP_VERSION = 9;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
+  var EXPECT_BUILD = 9;      // the HQ Apps Script release this app expects
   var LS = { config: 'hq.config', links: 'hq.links', user: 'hq.user', name: 'hq.name' };
   var SS_TOKEN = 'hq.idToken';
   var GSI_SRC = 'https://accounts.google.com/gsi/client';
@@ -140,7 +140,8 @@
     isHere: function () { return S.route === 'exhibitors' && !!$('#main') && !!S.token; },
     signedIn: function () { return !!S.token; },
     rerender: function () { if (S.route === 'exhibitors') renderRoute(); },
-    helloFailed: function () { return !S.helloDone && !!S.helloErr; }
+    helloFailed: function () { return !S.helloDone && !!S.helloErr; },
+    overviewStale: function () { S.ovDirty = true; }   // Exhibitors changed the pipeline: the Overview reads it again when you open it
   });
 
   // ------------------------------------------------------------------------------------------------ Google sign-in
@@ -980,7 +981,9 @@
     var r = $('#ov-refresh'); if (r) r.onclick = function () { fetchOverview(true); };
     var t = $('#ov-retry'); if (t) t.onclick = function () { S.ovErr = ''; renderRoute(); fetchOverview(true); };
     if (!S.ov && !S.ovErr && !S.busy.ov && S.token) fetchOverview(false);
-    else if (S.ov && S.ovDirty && !S.busy.ov && S.token) { S.ovDirty = false; fetchOverview(true); }
+    // Changed elsewhere (Exhibitors, the Inbox, Settings), or more than a minute old: read it again as you arrive.
+    // Make batch waits meanwhile, so the number on it is the number you get.
+    else if (S.ov && (S.ovDirty || Date.now() - (S.ovAt || 0) > 60000) && !S.busy.ov && S.token) { S.ovDirty = false; fetchOverview(true); }
   }
 
   // ------------------------------------------------------------------------------------------------ Batches (release 3)
@@ -1053,7 +1056,8 @@
       else if (p.step === 'season') when = 'for ' + fmtDay(p.due);
       else when = dayDiff(p.due) <= 0 ? 'due since ' + fmtDay(p.due) : 'due from ' + fmtDay(p.due);
       return '<div class="prop">' + lineDot(p.line, p.sector) + '<span class="prop-tx"><b>' + esc(p.show) + ' · ' + esc(p.stepLabel) + '</b><span class="muted small">' + esc(plural(p.count, 'prospect') + (when ? ' · ' + when : '')) + '</span></span>' +
-        '<button class="btn small" data-make="' + esc(p.showId) + '" data-step="' + esc(p.step) + '" data-count="' + p.count + '" data-label="' + esc(p.show + ' · ' + p.stepLabel) + '">' + I.plus + 'Make batch</button></div>';
+        (S.busy.ov ? '<button class="btn small" disabled aria-busy="true"><span class="spinner"></span>Updating…</button></div>'
+          : '<button class="btn small" data-make="' + esc(p.showId) + '" data-step="' + esc(p.step) + '" data-count="' + p.count + '" data-label="' + esc(p.show + ' · ' + p.stepLabel) + '">' + I.plus + 'Make batch</button></div>');
     }).join('');
     return '<section class="panel" aria-labelledby="dep-h"><div class="panel-head"><div><span class="eyebrow">Batches</span><h2 class="h2" id="dep-h">Departures</h2>' +
       '<span class="sub small">A batch is a group from one show that goes through first email, Day 2 and Last touch together. Autopilot sends started batches, top first.</span></div>' +
@@ -1067,10 +1071,20 @@
     main.onclick = function (ev) {
       var mk = ev.target.closest('[data-make]'), mv = ev.target.closest('[data-bmove]'), rm = ev.target.closest('[data-bremove]');
       var st = ev.target.closest('[data-bstart]'), pa = ev.target.closest('[data-bpause]'), mb = ev.target.closest('[data-bmembers]'), dr = ev.target.closest('[data-drop]');
-      var am = ev.target.closest('[data-apmode]'), ad = ev.target.closest('[data-apdry]'), ac = ev.target.closest('[data-apcontinue]');
+      var am = ev.target.closest('[data-apmode]'), ad = ev.target.closest('[data-apdry]'), ac = ev.target.closest('[data-apcontinue]'), ak = ev.target.closest('[data-apkeep]');
+      if (ak) {
+        if (ak.dataset.apkeep === 'clear') {
+          batchCall(ak, 'keepGoing', { clear: true }, function (j) { var w = j.overview && j.overview.autopilot && j.overview.autopilot.window; return 'Back to the usual window' + (w && w.closes ? ': ' + w.closes + ' close' : ''); }, true);
+          return;
+        }
+        var until = ($('#ap-until') || {}).value;
+        if (!until || !window.confirm('Keep autopilot sending until ' + until + ' today?\n\nToday only. It still sends at most 20 a run and stays within the day’s limit.')) return;
+        batchCall(ak, 'keepGoing', { until: until }, function () { return 'Autopilot keeps going until ' + until + ' today'; });
+        return;
+      }
       if (st) {
         var live = S.ov && S.ov.autopilot && S.ov.autopilot.mode === 'live';
-        if (!window.confirm('Start ' + st.dataset.bstart + '?\n\n' + (live ? 'Autopilot is Live: it emails this batch in its next window (weekdays 08:30–11:30), top batches first.' : 'Autopilot sends it once it’s on (Dry run first shows exactly what it would send).') + ' You can pause it any time.')) return;
+        if (!window.confirm('Start ' + st.dataset.bstart + '?\n\n' + (live ? 'Autopilot is Live: it emails this batch in its next window (weekdays ' + winText(S.ov.autopilot.window) + '), top batches first.' : 'Autopilot sends it once it’s on (Dry run first shows exactly what it would send).') + ' You can pause it any time.')) return;
         batchCall(st, 'startBatch', { id: st.dataset.bstart }, function (j) { return 'Started ' + j.batch.id; });
       } else if (pa) {
         batchCall(pa, 'pauseBatch', { id: pa.dataset.bpause }, function (j) { return 'Paused ' + j.batch.id + ': autopilot won’t send to it'; }, true);
@@ -1094,7 +1108,7 @@
         }, function (e) { S.busy.batch = false; dr.disabled = false; toast(e.kind === 'signin' ? 'Sign in again, then try once more.' : e.message, true); });
       } else if (am) {
         var mode = am.dataset.apmode;
-        if (mode === 'live' && !window.confirm('Switch autopilot to Live?\n\nIn each sending window (weekdays 08:30–11:30) it emails the batches you’ve started, top first, within the day’s limit. The first run sends 5, then waits for you to check them in Gmail Sent and press Continue.')) return;
+        if (mode === 'live' && !window.confirm('Switch autopilot to Live?\n\nIn each sending window (weekdays ' + winText(S.ov && S.ov.autopilot && S.ov.autopilot.window) + ') it emails the batches you’ve started, top first, within the day’s limit. The first run sends 5, then waits for you to check them in Gmail Sent and press Continue.')) return;
         batchCall(am, 'setAutopilot', { mode: mode }, function () { return mode === 'live' ? 'Autopilot is Live' : mode === 'dry' ? 'Autopilot is on Dry run: it sends nothing' : 'Autopilot is off'; }, mode === 'off');
       } else if (ad) {
         batchCall(ad, 'autopilotDryRun', {}, function () { return 'Dry run asked for: results within 10 minutes, nothing is sent'; });
@@ -1138,16 +1152,50 @@
   // ------------------------------------------------------------------------------------------------ Autopilot (release 5)
   function apLine(ap) {
     if (!ap || !ap.installed) return 'Autopilot isn’t set up in the pipeline yet.';
-    if (ap.mode === 'live') return 'Autopilot is Live: it sends started batches on weekdays, 08:30 to 11:30.';
+    if (ap.mode === 'live') return 'Autopilot is Live: it sends started batches on weekdays, ' + winText(ap.window) + '.';
     if (ap.mode === 'dry') return 'Autopilot is on Dry run: it works out what it would send each morning, and sends nothing.';
     return 'Autopilot is off: nothing is sent.';
   }
+  // Release 9: the window's times come from the HQ settings tab (Settings changes them; Keep going today, one day's close)
+  function winText(w) { return (w && w.opens ? w.opens : '08:30') + ' to ' + (w && w.closes ? w.closes : '11:30'); }
   function apWhen(w) {
     if (!w) return '';
-    if (w.open) return 'Sending window open now, until 11:30.';
+    if (w.open) return 'Sending window open now, until ' + (w.closesToday || '11:30') + (w.extended ? ' today' : '') + '.';
     if (!w.next) return '';
     var d = dayDiff(w.next);
-    return 'Next sending window: ' + (d === 0 ? 'today' : d === 1 ? 'tomorrow' : fmtDay(w.next)) + ', 08:30 to 11:30.';
+    return 'Next sending window: ' + (d === 0 ? 'today' : d === 1 ? 'tomorrow' : fmtDay(w.next)) + ', ' + winText(w) + '.';
+  }
+  function londonHm() {
+    var t = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
+    return hm(t);
+  }
+  function hm(s) { var m = /^(\d{1,2}):(\d{2})$/.exec(s || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : NaN; }
+  function hhmm(n) { return ('0' + Math.floor(n / 60)).slice(-2) + ':' + ('0' + (n % 60)).slice(-2); }
+  /** Keep going today: on a sending day while Live, keep today's window open later (up to 18:00), or stop as usual. */
+  function windowStrip(ap) {
+    var w = ap.window;
+    if (!w || !w.sendingDay || ap.mode !== 'live' || !w.closes) return '';
+    var now = londonHm(), close = hm(w.closes), closeToday = hm(w.closesToday || w.closes), LAST = 18 * 60;
+    if (!(ap.file >= 9)) return now < LAST ? '<p class="note" style="margin:0">To keep going past ' + esc(w.closes) + ' on a day, paste the new HQAutopilot.gs into the pipeline’s Apps Script. It reports in within 10 minutes.</p>' : '';
+    if (w.extended) {
+      if (now >= closeToday) return '';
+      return '<div class="win ext"><div class="what"><b>Kept going until ' + esc(w.closesToday) + ' today</b><span>Your one-off. Next time: ' + esc(winText(w)) + '.</span></div>' +
+        '<button class="btn small" data-apkeep="clear">' + (now >= close ? 'Stop now' : 'Stop at ' + esc(w.closes) + ' as usual') + '</button></div>';
+    }
+    var opts = [];
+    for (var t = Math.max(close + 30, Math.floor(now / 30) * 30 + 30); t <= LAST; t += 30) opts.push(t);
+    if (!opts.length) return '';
+    var per = ap.perRun || 20, left = Math.max(0, Math.min(ap.total || 0, ap.room == null ? Infinity : ap.room));
+    var need = left ? Math.max(now, hm(w.opens)) + (Math.ceil(left / per) - 1) * 10 + 5 : 0;
+    var pick = opts.filter(function (x) { return x >= need; })[0] || opts[opts.length - 1];
+    var by = hhmm(Math.ceil(need / 5) * 5);
+    var sub = left ? plural(left, 'email') + ' still due today. ' + (need <= close ? 'At ' + per + ' a run, they’ll all go by about ' + by + ', before it closes.' : 'At ' + per + ' a run, they need until about ' + by + '.')
+      : ap.total ? 'Today’s limit is reached, so nothing more goes today.' : 'Nothing more is due today in your started batches.';
+    return '<div class="win"><div class="what"><b>Today’s window: ' + esc(winText(w)) + '</b><span>' + esc(sub) + '</span></div>' +
+      '<label class="sub small" for="ap-until">Keep sending until</label><select class="input" id="ap-until">' +
+      opts.map(function (x) { return '<option value="' + hhmm(x) + '"' + (x === pick ? ' selected' : '') + '>' + hhmm(x) + '</option>'; }).join('') + '</select>' +
+      '<button class="btn small yellow" data-apkeep="go">Keep going today</button></div>' +
+      '<p class="note" style="margin:0">Today only: tomorrow it’s ' + esc(winText(w)) + ' again. The daily limit (' + esc(ap.limit) + ') still applies, and the first-emails check still waits for you.</p>';
   }
 
   function autopilotPanel(o) {
@@ -1199,7 +1247,7 @@
     }).join('');
     var rules = ap.rules ? '<p class="note" style="margin:0">Each business: ' + (ap.rules.rest ? 'rests ' + plural(ap.rules.rest, 'day') + ' after any email before a new show’s first email' : 'no rest between shows') +
       ', ' + (ap.rules.cap ? 'at most ' + plural(ap.rules.cap, 'email') + ' in 12 months' : 'no yearly limit') + ', never two in a day. Change these on the HQ settings tab (Rest days, Yearly cap).</p>' : '';
-    return '<section class="panel ap ap-' + ap.mode + '" aria-labelledby="ap-h">' + head + warn + check +
+    return '<section class="panel ap ap-' + ap.mode + '" aria-labelledby="ap-h">' + head + windowStrip(ap) + warn + check +
       (ap.lastRun ? '<p class="sub small" style="margin:0"><b>Last run:</b> ' + esc(ap.lastRun) + '</p>' : '') +
       '<div class="ap-cols"><div><span class="eyebrow">Next</span><p class="sub small" style="margin:4px 0 0">' + esc(nextHead) + '</p>' +
       (list ? '<div class="arrs">' + list + '</div>' : '') + (ap.next.length > 12 ? '<p class="note" style="margin:0">and ' + (ap.next.length - 12) + ' more' + (ap.total > ap.next.length ? ' (' + ap.total + ' in all)' : '') + '.</p>' : '') + '</div>' +
@@ -1751,6 +1799,8 @@
     // Exhibitor Leads' own settings: checks, notifications, usage (release 8: moved here from its own page)
     if (window.HQX) html += window.HQX.settingsHtml();
 
+    html += autopilotSettings(st);
+
     // Script Properties checklist
     var props = (st && st.props) || S.props;
     html += '<section class="panel"><div class="panel-head"><div><span class="eyebrow">Script Properties</span><h2 class="h3">Settings in your HQ script</h2>' +
@@ -1776,6 +1826,41 @@
     return html;
   }
 
+  // Release 9: the normal sending window (on the pipeline's HQ settings tab) and the watch (HQ's own 15-minute check)
+  function autopilotSettings(st) {
+    if (!st || !st.autopilot) return '';
+    var a = st.autopilot, w = a.window, wt = a.watch || {};
+    var opt = function (from, to, cur) {
+      var list = [];
+      for (var t = from; t <= to; t += 30) list.push(hhmm(t));
+      if (cur && list.indexOf(cur) < 0) { list.push(cur); list.sort(); }
+      return list.map(function (x) { return '<option' + (x === cur ? ' selected' : '') + '>' + x + '</option>'; }).join('');
+    };
+    var old = w && !(a.file >= 9);
+    var win = !w ? '<p class="note" style="margin:0">' + esc(a.why ? 'Couldn’t read the HQ settings tab: ' + a.why : 'Autopilot isn’t set up in the pipeline yet (hqAutopilotSetUp).') + '</p>'
+      : (old ? '<p class="banner" style="margin:0"><span class="grow">Paste the new HQAutopilot.gs into the pipeline’s Apps Script first: the one there still sends ' + esc(winText(w)) + ' whatever HQ says. It reports in within 10 minutes; then Check again.</span></p>' : '') +
+        (w.unusable ? '<p class="banner" style="margin:0"><span class="grow">Window opens and Window closes on the HQ settings tab weren’t usable (they need times like 08:30), so autopilot keeps to 08:30 to 11:30. Save a window here to put them right.</span></p>' : '') +
+        '<div class="timepair"><div class="field"><label for="st-opens">Opens</label><select class="input" id="st-opens">' + opt(7 * 60, 17 * 60, w.opens) + '</select></div>' +
+        '<div class="field"><label for="st-closes">Closes</label><select class="input" id="st-closes">' + opt(8 * 60, 18 * 60, w.closes) + '</select></div>' +
+        '<button class="btn small" id="st-win-save"' + (old ? ' disabled' : '') + '>Save</button></div>' +
+        '<p class="note" style="margin:0">Weekdays only, never on bank holidays or 20 Dec to 3 Jan. Any time from 07:00 to 18:00, at least an hour long. For one day only, use Keep going on the Overview' +
+        (w.extended ? ' (today it’s kept going until ' + esc(w.closesToday) + ')' : '') + '.</p>';
+    var at = wt.at ? timeLabel(wt.at) + (timeLabel(wt.at).indexOf(':') < 0 ? ' ' + clock(wt.at) : '') : '';
+    var test = wt.telegram ? '<button class="btn small" id="st-watch-test">' + I.send + 'Send a test alert</button>' : '';
+    // On, but quiet for over 35 minutes in sending hours: its trigger isn't running (Executions says why)
+    var nowM = londonHm(), stale = wt.on === true && w && w.sendingDay && nowM >= hm(w.opens) && nowM < hm(w.closesToday || w.closes) &&
+      (!wt.at || Date.now() - Date.parse(wt.at) > 35 * 60000);
+    var watch = stale ? row('bad', 'The watch has gone quiet', 'Its last check was ' + (at ? esc(at) : 'never') + '. In HQ’s Apps Script, Executions shows why hqWatch isn’t running; run <b>hqWatchSetUp</b> again to restart it.', test)
+      : wt.on === true
+      ? row(wt.ok ? 'ok' : 'bad', wt.ok ? 'Watch is on' : 'Watch: autopilot isn’t looking in', 'HQ checks every 15 minutes on sending days, from 15 minutes before the window opens until it closes.' +
+          (at ? ' Last check ' + esc(at) + ': ' + esc(wt.line) : ' No check yet: the first comes in sending hours.'), test)
+      : wt.on === false ? row('no', 'Watch isn’t set up yet', 'In HQ’s Apps Script, choose <b>hqWatchSetUp</b> and press Run, once. Allow it when Google asks: it adds the watch’s 15-minute trigger.', test)
+      : row('bad', 'The watch can’t be checked', 'HQ’s script needs your permission for its trigger: in its Apps Script, run <b>hqWatchSetUp</b> once. If that fails, Project Settings → Show “appsscript.json”, and paste in this release’s appsscript.json.', test);
+    return '<section class="panel" aria-labelledby="st-ap-h"><div class="panel-head"><div><span class="eyebrow">Autopilot</span><h2 class="h3" id="st-ap-h">Sending window and watch</h2>' +
+      '<span class="sub small">The window is kept on the pipeline’s HQ settings tab, next to Rest days and Yearly cap.</span></div></div>' + win +
+      '<div class="rows">' + watch + '</div>' + (wt.telegram ? '' : '<p class="note" style="margin:0">The watch tells you on Telegram: add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID first.</p>') + '</section>';
+  }
+
   function bindSettings() {
     var on = function (id, fn) { var el = $(id); if (el) el.onclick = fn; };
     on('#st-signout', signOut);
@@ -1787,6 +1872,25 @@
       renderConnect();
     });
     on('#st-recheck', function () { S.status = null; S.statusErr = ''; renderRoute(); fetchStatus(); });
+    on('#st-win-save', function (ev) {
+      var b = ev.currentTarget, opens = $('#st-opens').value, closes = $('#st-closes').value;
+      if (hm(closes) - hm(opens) < 60) { toast('The window has to be at least an hour long.', true); return; }
+      b.disabled = true;
+      var gen = S.gen;
+      call('setWindow', { opens: opens, closes: closes }, { timeout: 60000 }).then(function (j) {
+        if (gen !== S.gen) return;
+        b.disabled = false;
+        if (S.status && S.status.autopilot) S.status.autopilot.window = j.window;
+        S.ovDirty = true;
+        if (S.route === 'settings') renderRoute();
+        toast('Sending window: ' + j.window.opens + ' to ' + j.window.closes + ' on weekdays');
+      }, function (e) { b.disabled = false; toast(e.kind === 'signin' ? 'Sign in again, then save.' : e.message, true); });
+    });
+    on('#st-watch-test', function (ev) {
+      var b = ev.currentTarget; b.disabled = true;
+      call('watchTest').then(function (j) { b.disabled = false; toast(j.sent ? 'Test alert sent to Telegram' : (j.why || 'Not sent'), !j.sent); },
+        function (e) { b.disabled = false; toast(e.message, true); });
+    });
     on('#st-tg', function (ev) {
       var b = ev.currentTarget; b.disabled = true;
       call('testTelegram').then(function (j) { b.disabled = false; toast(j.sent ? 'Test sent to Telegram' : (j.why || 'Not sent'), !j.sent); },

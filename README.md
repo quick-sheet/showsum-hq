@@ -2,7 +2,7 @@
 
 G's private control room for the Showsum outreach engine: one app on desktop and phone that sits over the existing Showsum Pipeline and Exhibitor Leads scripts.
 
-**Release 8:** Exhibitors is a section of HQ now, in HQ's own shell and look, laid out for a desktop: each sector a line with its shows as the stops, an exhibition table per sector, and a show page with the exhibitor open beside the list. Sectors is folded in, and Exhibitor Leads' own settings are on HQ's Settings page. Release 7: Exhibitors. Everything the Exhibitor Leads app does, inside HQ, with the pipeline's side of each show: Go (the pipeline's own import, straight away), a fast-lane batch of the P1 and P2 ones that you start, and your Companies House calls on "Check" rows. Release 6: one business, not one row. HQ knows when rows across shows are the same business, and autopilot rests a business 30 days before a new show's first email, sends it at most 4 emails a year and never two in a day. Release 5 brought autopilot: you start batches in HQ; the pipeline's HQAutopilot file emails them on weekday mornings, through the pipeline's own templates, Gmail alias, rules and limits. Release 4 brought the Inbox; release 3 batches; release 2 the live Overview and Customers; release 1 the shell, the Google sign-in lock, Launchpad and Settings.
+**Release 9:** the sending window is yours to set (Settings), Keep going today keeps one day's window open later (the Autopilot panel), and HQ's own watch tells you on Telegram if autopilot stops looking in. Release 8: Exhibitors is a section of HQ now, in HQ's own shell and look, laid out for a desktop: each sector a line with its shows as the stops, an exhibition table per sector, and a show page with the exhibitor open beside the list. Sectors is folded in, and Exhibitor Leads' own settings are on HQ's Settings page. Release 7: Exhibitors. Everything the Exhibitor Leads app does, inside HQ, with the pipeline's side of each show: Go (the pipeline's own import, straight away), a fast-lane batch of the P1 and P2 ones that you start, and your Companies House calls on "Check" rows. Release 6: one business, not one row. HQ knows when rows across shows are the same business, and autopilot rests a business 30 days before a new show's first email, sends it at most 4 emails a year and never two in a day. Release 5 brought autopilot: you start batches in HQ; the pipeline's HQAutopilot file emails them on weekday mornings, through the pipeline's own templates, Gmail alias, rules and limits. Release 4 brought the Inbox; release 3 batches; release 2 the live Overview and Customers; release 1 the shell, the Google sign-in lock, Launchpad and Settings.
 
 Lives at **https://hq.quick-sheet.com** (GitHub Pages with its own subdomain, so no other app shares its address).
 
@@ -26,7 +26,9 @@ HQ Exhibitors (exhibitors.js) ──► Exhibitor Leads web app directly, with t
 
 Pipeline script + HQInbox.gs + HQAutopilot.gs (apps-script/pipeline/, pasted into the pipeline's own Apps Script project)
    ├── HQInbox, every hour, 7am–9pm: logs new messages from prospects to the Inbox tab. HQ never opens Gmail.
-   └── HQAutopilot, every 10 minutes: sends started batches on weekdays 08:30–11:30 (or a dry run), logs to the Autopilot tab.
+   └── HQAutopilot, every 10 minutes: sends started batches in the weekday sending window (or a dry run), logs to the Autopilot tab.
+
+HQ script's own trigger (release 9): hqWatch, every 15 minutes in sending hours, checks autopilot is still looking in.
 ```
 
 - The pipeline sheet stays the master record. HQ adds a few tabs of its own (Batches, Inbox, HQ settings).
@@ -132,7 +134,7 @@ If `Code.gs` changed, also bump `BUILD` in `Code.gs` and `EXPECT_BUILD` in `hq.j
 - **Modes (on the Autopilot panel):**
   - **Off:** nothing is sent.
   - **Dry run:** once each weekday morning in the window it works out exactly what it would send, logs it to the Autopilot tab and Telegram, and sends nothing. **Dry run now** asks for one straight away, at any hour (within 10 minutes).
-  - **Live:** in each sending window (weekdays 08:30–11:30, London; not bank holidays or 20 Dec – 3 Jan) it sends up to 20 emails a run, every 10 minutes, within the day's limit and the bounce hold from the Send limits tab. After each switch to Live, the first run sends 5 and waits: check them in Gmail Sent and press **Continue**.
+  - **Live:** in each sending window (weekdays, London, 08:30–11:30 unless you change it; not bank holidays or 20 Dec – 3 Jan) it sends up to 20 emails a run, every 10 minutes, within the day's limit and the bounce hold from the Send limits tab. After each switch to Live, the first run sends 5 and waits: check them in Gmail Sent and press **Continue**.
 - **What it sends:** each member's next email when it's due: the first email (A for Google Workspace, B otherwise) from 14 days before the show up to the day before it starts; Day 2 two days after the show ends; Last touch 12 days after Day 2; Season planning in the second week of January. Before each email it checks again with the Showsum menu's own skip rules, and never emails anyone opted out, bounced, without "Yes" in Can email, engaged, with a reply waiting in the Inbox, or already sent that email. It sends and records each one exactly as the menu does (Touches note "Autopilot B01").
 - **Safety:** before each live run it checks the Inbox (HQInbox.gs must be in the pipeline project too) and runs the "no thanks" check; if either fails, nothing is sent. Each email's row is read again just before it goes. The Touches line is written straight after each email; if an email that went can't be recorded, autopilot switches itself Off and tells you (Telegram and the Autopilot panel), so nothing is sent twice. Three failed sends in a row also switch it off. Don't send from the Showsum menu while autopilot is Live.
 - **One business, many rows (release 6):** rows are the same business when they share a name (tidied: Ltd, The, UK, spaces and punctuation ignored, "&" and "+" read as "and"), an email address, or the company's own domain: its email domain or its website. Personal mail providers (gmail.com, btinternet.com…) and shared site platforms (Etsy, Facebook, Instagram, Linktree…) never link rows, and nor does a domain used by more than three differently named businesses. For each business, across all its rows and shows:
@@ -143,9 +145,23 @@ If `Code.gs` changed, also bump `BUILD` in `Code.gs` and `EXPECT_BUILD` in `hq.j
   - Change Rest days and Yearly cap on the HQ settings tab (0 turns either off). Autopilot adds the two rows there on its next look.
   - Members tag anyone also in another batch (ALSO IN B01), and say why someone is resting or not sent.
 - **The plan is HQ's own:** HQAutopilot.gs carries a copy of HQ's planning code, rebuilt with every release, so the preview on the Overview, the dry run and the live sends agree. Paste the new HQAutopilot.gs whenever a release includes it.
+- **The sending window (release 9):** Settings → Sending window and watch sets when it opens and closes on weekdays, any time from 07:00 to 18:00, at least an hour. It's kept on the HQ settings tab as Window opens and Window closes (autopilot adds the rows on its next look). Opening earlier or closing later needs a recent sign-in, like switching to Live.
+- **Keep going today:** on the Autopilot panel while Live, on a sending day: keeps today's window open until a later time (half hours, up to 18:00), with how long what's left would take at 20 a run. Today only (Keep going until on the HQ settings tab; it means nothing the next day). **Stop as usual** puts it back. The daily limit and the first-emails check still apply.
+- **Going back to an older HQAutopilot.gs:** HQ goes by the Autopilot file row on the HQ settings tab. If you ever paste an older file back, clear that row's Value too, or HQ would still offer window changes the old file ignores.
+- **The watch:** HQ's own script, not the pipeline's, so it still works if the pipeline loses its trigger. Every 15 minutes on sending days, from 15 minutes before the window opens until it closes, while autopilot isn't Off: if autopilot hasn't looked in for 25 minutes, one Telegram message (again the next day if it's still the case), and one when it's back. **Set-up, once:** in HQ's Apps Script, choose `hqWatchSetUp` and press Run, and allow it when Google asks (it adds its trigger). Settings shows the last check, and **Send a test alert**.
 - **To stop at once:** switch it Off in HQ, or delete the `hqAutopilotTick` trigger.
 
 ## Releases
+
+- **9** (3 Nov 2026):
+  - The sending window set from Settings (07:00–18:00, at least an hour); Keep going today on the Autopilot panel (one day's window open later, up to 18:00).
+  - The watch: HQ's own 15-minute check in sending hours; one Telegram message if autopilot stops looking in, one when it's back. Settings shows it, with a test alert.
+  - The Overview reads the pipeline again when you open it after a change in Exhibitors (or when it's more than a minute old); Make batch shows "Updating…" until it has.
+  - Install in this order, outside 08:30–11:30: (1) the pipeline's new HQAutopilot.gs (on its own it behaves as before; it reports its release on the HQ settings tab as Autopilot file within 10 minutes, and HQ only moves the window after that); (2) HQ's Code.gs (build 9), plus this release's appsscript.json if the project shows one with oauthScopes; run hqWatchSetUp and allow it; deploy a new version; (3) the web files.
+
+- **8** (3 Nov 2026):
+  - Exhibitors as a section of HQ, in its shell and look, laid out for a desktop; Sectors folded in; Exhibitor Leads' settings on HQ's Settings page. `exhibitors/` forwards into HQ.
+  - Needs: HQ Code.gs (build 8).
 
 - **7** (3 Nov 2026):
   - Exhibitors page: the Exhibitor Leads app inside HQ, on HQ's sign-in, in memory only.
