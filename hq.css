@@ -647,6 +647,10 @@ a.kpi:hover { transform: translateY(-2px); border-color: var(--line-2); }
 .xt tr[data-xrow] { cursor: pointer; }
 .xt tr[data-xrow]:focus-visible { outline: 2px solid var(--yellow); outline-offset: -2px; }
 .xt tr.sel td { background: rgba(255,210,63,.07); }
+/* release 11: already gone through Go into the pipeline */
+.xt tr.gone td { opacity: .45; }
+.xt tr.gone td:last-child { opacity: .85; }
+.xt tr.gone .nm b { text-decoration: line-through; text-decoration-color: rgba(255,255,255,.35); }
 .xt tr.sel td:first-child { box-shadow: inset 3px 0 0 var(--yellow); }
 .xt .r { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .xt .nm { display: flex; flex-direction: column; min-width: 0; }

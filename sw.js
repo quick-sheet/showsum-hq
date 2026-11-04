@@ -1,13 +1,13 @@
 /* Showsum HQ service worker: keeps the app shell for offline opening (Exhibitors is part of it since release 8). Never caches anything from your scripts. */
-const CACHE = 'showsum-hq-v9';
+const CACHE = 'showsum-hq-v11';
 const SHELL = [
   './',
   'index.html',
-  'config.js?v=9',
-  'hq.css?v=9',
-  'exhibitors/core.js?v=9',
-  'exhibitors.js?v=9',
-  'hq.js?v=9',
+  'config.js?v=11',
+  'hq.css?v=11',
+  'exhibitors/core.js?v=11',
+  'exhibitors.js?v=11',
+  'hq.js?v=11',
   'manifest.webmanifest',
   'icon.svg',
   'icon-192.png',
@@ -44,7 +44,7 @@ self.addEventListener('fetch', (e) => {
     // config.js skips the browser's own 10-minute copy (GitHub Pages sends max-age=600) and asks GitHub each time.
     const nav = req.mode === 'navigate';
     // each page keeps its own copy: HQ itself, or the old Exhibitors address, which forwards into HQ (a share arrives there, with ?url=)
-    const key = nav ? (/\/exhibitors\/(index\.html)?$/.test(url.pathname) ? 'exhibitors/index.html' : 'index.html') : 'config.js?v=9';
+    const key = nav ? (/\/exhibitors\/(index\.html)?$/.test(url.pathname) ? 'exhibitors/index.html' : 'index.html') : 'config.js?v=11';
     e.respondWith(
       fetch(req, nav ? undefined : { cache: 'no-cache' }).then((res) => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(key, copy)); }

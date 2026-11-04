@@ -82,9 +82,12 @@
 
   const STATUS_LABEL = { corporate: 'Can email', check: 'To check', consent: 'Consent needed', pending: 'Checking' };
 
+  /** Consent you recorded (release 20): only with the date it was given, as Exhibitor Leads saves it. */
+  const hasConsent = (row) => !!row && /^\d{4}-\d{2}-\d{2}$/.test(String(row.consentAt || ''));
   function statusOf(row) {
     if (!row || (row.state !== 'done' && row.state !== 'error')) return 'pending';
-    return row.emailable === 'corporate' ? 'corporate' : row.emailable === 'check' ? 'check' : 'consent';
+    // Consent you recorded (release 20) means they can be emailed, whatever the company check says
+    return row.emailable === 'corporate' || hasConsent(row) ? 'corporate' : row.emailable === 'check' ? 'check' : 'consent';
   }
 
   const isGoogle = (row) => !!row && (row.workspace === 'yes' || row.workspace === 'likely');
@@ -97,12 +100,13 @@
 
   /** The same tallies the Apps Script keeps, worked out here so the screen can update while checks run. */
   function countRows(rows) {
-    const c = { total: 0, done: 0, corporate: 0, consent: 0, check: 0, google: 0, microsoft: 0, pending: 0, likely: 0, unread: 0 };
+    const c = { total: 0, done: 0, corporate: 0, consented: 0, consent: 0, check: 0, google: 0, microsoft: 0, pending: 0, likely: 0, unread: 0 };
     (rows || []).forEach((r) => {
       c.total++;
       const st = statusOf(r);
       if (st === 'pending') { c.pending++; return; }
       c.done++; c[st]++;
+      if (st === 'corporate' && hasConsent(r) && r.emailable !== 'corporate') c.consented++;   // in Can email, on consent
       if (isGoogle(r)) c.google++;
       else if (isMicrosoft(r)) c.microsoft++;
       if (isUnread(r)) c.unread++;
@@ -175,6 +179,9 @@
   function emailRule(row) {
     const st = statusOf(row);
     if (st === 'pending') return 'Still being checked.';
+    if (st === 'corporate' && hasConsent(row) && row.emailable !== 'corporate') {
+      return `Consent given ${String(row.consentHow || '').toLowerCase()} on ${row.consentAt}, as you recorded it, so you can email them. Keep to what they agreed to, and give a way to opt out.`.replace('given  on', 'given on');
+    }
     if (st === 'corporate') {
       return 'Confirmed as a limited company or LLP. That makes it a corporate subscriber, so you can email its business address without asking first. Say who you are, make the offer relevant to the business and give a way to opt out.';
     }
@@ -630,6 +637,8 @@
   }
 
   const CAN_TXT = { corporate: 'Yes, corporate subscriber', check: 'Check first', consent: 'No, get consent first', pending: 'Not checked yet' };
+  // Release 20: consent you recorded, with how and when, for a business that isn't a confirmed limited company
+  const canTxt = (r, st) => (st === 'corporate' && hasConsent(r) && r.emailable !== 'corporate' ? `Yes, consent given ${String(r.consentHow || '').toLowerCase()} on ${r.consentAt}` : CAN_TXT[st]);
   const MATCH_TXT = { verified: 'Confirmed', likely: 'Likely', possible: 'Possible', none: 'None found' };
   const WS_TXT = { yes: 'Yes', likely: 'Probably', no: 'No', unknown: 'Unknown' };
 
@@ -639,7 +648,7 @@
       const st = statusOf(r), show = (showsById && showsById[r.showId]) || {};
       const done = st !== 'pending';
       const cells = [
-        r.name, r.website, r.contact, r.contact ? r.contactSrc : '', r.email, emailKindLabel(r.emailKind), r.phone, CAN_TXT[st],
+        r.name, r.website, r.contact, r.contact ? r.contactSrc : '', r.email, emailKindLabel(r.emailKind), r.phone, canTxt(r, st),
         done ? MATCH_TXT[r.legal] || '' : '', r.companyName, r.companyNo, r.companyStatus, companyUrl(r.companyNo),
         done ? WS_TXT[r.workspace] || 'Unknown' : '', r.mailHost, done ? r.alsoUses : '',
         r._shows ? r._shows.join('; ') : show.name, r._sector || show.sector, r.stand, r.category, [r.note, r._also && r._also.length ? 'Also listed as ' + r._also.join('; ') : ''].filter(Boolean).join('. '),
@@ -911,7 +920,7 @@
 
   return {
     esc, plural, dayNum, todayIso, GROUPS, showGroup, groupShows, fmtDates, ago,
-    STATUS_LABEL, statusOf, isGoogle, isMicrosoft, providerOf, countRows, workspaceShort, workspaceLabel, rowSub, rowParts, companyTypeLabel, companyUrl, legalLabel, emailRule, emailKindLabel,
+    STATUS_LABEL, statusOf, hasConsent, isGoogle, isMicrosoft, providerOf, countRows, workspaceShort, workspaceLabel, rowSub, rowParts, companyTypeLabel, companyUrl, legalLabel, emailRule, emailKindLabel,
     FILTERS, filterRows, filterCount, summary, isUnread, shares, listedIn, listedCount, reachSummary, makeTopic, showFromHash,
     SECTOR_PRESETS, cleanSector, matchSector, sectorsFrom, searchLinks,
     validUrl, linkBoxKind, whereParts, parseShared, isDirectory, finderPages, tileFor, mapsUrl, searchText, validApiUrl, slug,

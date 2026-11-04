@@ -16,7 +16,7 @@ const X = {
   route: { v: 'home' }, routeKey: '', filter: 'all', nextFilter: '', statusAt: 0, statusErr: '', diaryLoading: {}, q: '', limit: 200, sel: null, pick: null, whyText: '', shared: null,
 };
 const E = { running: false, stop: false, showId: null, idle: 0, userPaused: false };
-const EXPECT_EL = 19;
+const EXPECT_EL = 20;   // release 20: consent you record (giveConsent)
 const STEP_WORDS = { first: 'First email', day2: 'Day 2', last: 'Last touch', season: 'Season planning', done: 'Done' };
 const PIPE_FILTERS = [{ id: 'pipe-in', label: 'In pipeline' }, { id: 'pipe-check', label: 'Your call' }, { id: 'pipe-out', label: 'Not in pipeline' }];
 
@@ -66,7 +66,7 @@ const hashFor = {
 };
 function go(hash) { if (location.hash === hash) { if (api.isHere()) api.rerender(); } else location.hash = hash; }
 const errText = (e) => (e && e.kind === 'signin' ? 'Sign in again to carry on.' : e && e.kind === 'network' ? 'Couldn’t reach Exhibitor Leads. Check you’re online, then Retry.'
-  : /unknown action/i.test((e && e.message) || '') ? 'Your Exhibitor Leads script needs its new version first: paste release 19 and deploy a new version.' : (e && e.message) || 'Something went wrong.');
+  : /unknown action/i.test((e && e.message) || '') ? `Your Exhibitor Leads script needs its new version first: paste release ${EXPECT_EL} and deploy a new version.` : (e && e.message) || 'Something went wrong.');
 const elErr = errText;
 function toast(msg, bad, ms) { if (api.signedIn()) api.toast(msg, bad, ms); }
 
@@ -309,7 +309,7 @@ function homeBody() {
   return `<section class="kpis" aria-label="Your exhibitors at a glance">
       <div class="kpi"><div class="kpi-top"><span>Exhibitions</span><span>${plural(sectors.length, 'sector')}</span></div><div class="kpi-val">${commas(X.shows.length)}</div><div class="kpi-sub"><b>${soon}</b> in the next 3 weeks</div></div>
       <div class="kpi"><div class="kpi-top"><span>Exhibitors</span><span>checked</span></div><div class="kpi-val">${commas(t.total)}</div><div class="kpi-sub">${t.pending ? `<b>${commas(t.done)}</b> checked · ${commas(t.pending)} waiting` : 'All checked'}</div>${miniBar([['ok-bg', t.done], ['pending-bg', t.pending]])}</div>
-      <div class="kpi"><div class="kpi-top"><span>Can email</span><span>${pct(t.corporate, t.done)}</span></div><div class="kpi-val">${commas(t.corporate)}</div><div class="kpi-sub">Limited companies, confirmed</div>${miniBar([['ok-bg', t.corporate], ['check-bg', t.check], ['consent-bg', t.consent]])}</div>
+      <div class="kpi"><div class="kpi-top"><span>Can email</span><span>${pct(t.corporate, t.done)}</span></div><div class="kpi-val">${commas(t.corporate)}</div><div class="kpi-sub">${t.consented ? `Limited companies, and ${commas(t.consented)} on consent` : 'Limited companies, confirmed'}</div>${miniBar([['ok-bg', t.corporate], ['check-bg', t.check], ['consent-bg', t.consent]])}</div>
       ${callsN ? `<a class="kpi call" href="${esc(hashFor.show(calls[0].id))}" data-xcalls="${esc(calls[0].id)}"><div class="kpi-top"><span>Your calls</span><span>Companies House</span></div><div class="kpi-val">${commas(callsN)}</div><div class="kpi-sub">${esc(calls.slice(0, 2).map((c) => shortName(c.name) + ' ' + c.n).join(' · '))}</div></a>`
         : `<div class="kpi"><div class="kpi-top"><span>Your calls</span><span>Companies House</span></div><div class="kpi-val">0</div><div class="kpi-sub">${X.pipeAll ? 'Nothing waiting on you' : 'Reading the pipeline…'}</div></div>`}
       <div class="kpi"><div class="kpi-top"><span>In the pipeline</span><span>all shows</span></div><div class="kpi-val">${X.pipeAll ? commas(inPipe) : '…'}</div><div class="kpi-sub">${X.pipeAll ? `<b>${commas(emailed)}</b> emailed so far` : 'Reading the pipeline…'}</div></div>
@@ -450,13 +450,13 @@ function sectorBody(sector) {
   return `${shows.length ? `<section class="kpis" aria-label="${esc(sector)} at a glance">
       <div class="kpi"><div class="kpi-top"><span>Exhibitions</span><span>sector</span></div><div class="kpi-val">${shows.length}</div><div class="kpi-sub">${week ? `<b>${week}</b> on now or in 2 days` : `${groups.filter((g) => g.id === 'upcoming').reduce((a, g) => a + g.shows.length, 0)} coming up`}</div></div>
       <div class="kpi"><div class="kpi-top"><span>Exhibitors</span><span>checked</span></div><div class="kpi-val">${commas(t.total)}</div><div class="kpi-sub">${t.pending ? `${commas(t.done)} checked · ${commas(t.pending)} waiting` : 'All checked'}</div>${miniBar([['ok-bg', t.done], ['pending-bg', t.pending]])}</div>
-      <div class="kpi"><div class="kpi-top"><span>Can email</span><span>${pct(t.corporate, t.done)}</span></div><div class="kpi-val">${commas(t.corporate)}</div><div class="kpi-sub">Limited companies, confirmed</div>${miniBar([['ok-bg', t.corporate], ['check-bg', t.check], ['consent-bg', t.consent]])}</div>
+      <div class="kpi"><div class="kpi-top"><span>Can email</span><span>${pct(t.corporate, t.done)}</span></div><div class="kpi-val">${commas(t.corporate)}</div><div class="kpi-sub">${t.consented ? `Limited companies, and ${commas(t.consented)} on consent` : 'Limited companies, confirmed'}</div>${miniBar([['ok-bg', t.corporate], ['check-bg', t.check], ['consent-bg', t.consent]])}</div>
       ${callsN ? `<a class="kpi call" href="${esc(hashFor.show(calls[0].id))}" data-xcalls="${esc(calls[0].id)}"><div class="kpi-top"><span>Your calls</span><span>Companies House</span></div><div class="kpi-val">${callsN}</div><div class="kpi-sub">${esc(calls.slice(0, 2).map((c) => shortName(c.name) + ' ' + c.n).join(' · '))}</div></a>`
         : `<div class="kpi"><div class="kpi-top"><span>Your calls</span><span>Companies House</span></div><div class="kpi-val">0</div><div class="kpi-sub">${X.pipeAll ? 'Nothing waiting on you' : 'Reading the pipeline…'}</div></div>`}
     </section>` : ''}
     <div class="ov-grid"><div class="ov-main">
       <section class="panel" aria-labelledby="ex-h" style="--lc:${lineOf(sector)}"><div class="panel-head"><div><span class="eyebrow">The line</span><h2 class="h2" id="ex-h">Exhibitions</h2>
-        <span class="sub small">Go brings a show’s checked exhibitors into the pipeline, then makes a fast-lane batch of the P1 and P2 ones for you to start.</span></div></div>
+        <span class="sub small">Go brings a show’s checked exhibitors into the pipeline, then makes a fast-lane batch of everyone due a first email, for you to start.</span></div></div>
         ${shows.length ? `<div class="tbox"><table class="xt"><thead><tr><th scope="col">Exhibition</th><th scope="col">Dates</th><th scope="col">Exhibitors</th><th scope="col" class="r">Can email</th><th scope="col">Pipeline</th><th scope="col"><span class="sr">Action</span></th></tr></thead><tbody>
         ${groups.map((g) => `<tr class="grp"><td colspan="6">${esc(g.id === 'upcoming' ? 'Coming up' : g.label)}</td></tr>${g.shows.map(showTableRow).join('')}`).join('')}</tbody></table></div>`
           : `<p class="sub" style="margin:0">No exhibitions yet. Find one with the searches on the right, open its own website, then add it.</p>`}
@@ -638,18 +638,19 @@ function pipePanel(s, c) {
   const top = '<div class="panel-head"><div><span class="eyebrow">In the pipeline</span>';
   if (!d) return `<section class="panel">${top}<h2 class="h3">${pp.err ? 'Couldn’t read the pipeline' : 'Reading the pipeline…'}</h2></div></div>${pp.err ? `<p class="sub" style="margin:0">${esc(pp.err)}</p><button class="btn small" type="button" data-xa="pipe-retry" style="align-self:flex-start">Try again</button>` : ''}</section>`;
   const k = d.counts || {}, pc = pipeCounts(s.id, X.rows[s.id] || []) || {}, facts = [];
-  if (k.check) facts.push(`<li class="you"><b>${commas(k.check)}</b> waiting for your Companies House call</li>`);
+  if (k.check) facts.push(`<li class="you"><b>${commas(k.check)}</b> in the pipeline still waiting for your Companies House call (from before Go took only those you can email)</li>`);
+  if (c.check + c.consent) facts.push(`<li><b>${commas(c.check + c.consent)}</b> left here until you decide (${esc([c.check ? c.check + ' to check' : '', c.consent ? c.consent + ' consent needed' : ''].filter(Boolean).join(', '))}): Go brings them in once they can be emailed</li>`);
   if (k.imported && pc['pipe-out']) facts.push(`<li><b>${commas(pc['pipe-out'])}</b> checked here, not in the pipeline (other sectors, opt-outs, duplicates)</li>`);
   if (c.pending) facts.push(`<li><b>${commas(c.pending)}</b> still being checked here: Go leaves them for next time</li>`);
   if (d.show) facts.push(`<li>${d.show.attending ? `You’re going${d.show.visitDay && d.show.visitDay !== 'all' ? ': ' + esc(d.show.visitDay) : ''}` : 'Not going'}${d.show.page ? ` · emails link to /showsum/${esc(d.show.page)}/` : ''}</li>`);
-  if (d.firstReady) facts.push(`<li><b>${commas(d.firstReady)}</b> due a first email, not in a batch${d.fastReady ? ` (${commas(d.fastReady)} of them P1 or P2)` : ''}</li>`);
+  if (d.firstReady) facts.push(`<li><b>${commas(d.firstReady)}</b> due a first email, not in a batch${d.day2First ? ` (${d.day2First === d.firstReady ? 'all' : commas(d.day2First) + ' of them'} Day 2 as their first, after the show)` : ''}</li>`);
   const deps = (d.batches || []).map((b) => `<a class="dep-chip${b.status === 'Started' ? '' : ' idle'}" href="#/overview"><div><b>${esc(b.id)} · ${esc(STEP_WORDS[b.stage] || b.stage || '')}</b><span>${esc(plural(b.members, 'member'))}${b.dueNow ? ` · ${commas(b.dueNow)} due now` : ''}</span></div><span class="chip ${b.status === 'Started' ? 'live' : b.status === 'Paused' ? 'warn' : 'dim'}">${esc(b.status === 'Ready' ? 'Not started' : b.status)}</span></a>`).join('');
   const acts = [];
   if (pc['pipe-check']) acts.push(`<button class="btn small yellow" type="button" data-xfilter="pipe-check">Show the ${pc['pipe-check']} to decide</button>`);
   if (d.pipelineReady && c.total) acts.push(`<button class="btn small" type="button" data-xa="go" data-id="${esc(s.id)}">${k.imported ? 'Go again' : 'Go'}</button>`);
   acts.push('<a class="btn small" href="#/overview">Departures</a>');
   return `<section class="panel" aria-labelledby="pipe-h">${top}<h2 class="h3" id="pipe-h">${k.imported ? `${commas(k.imported)} in · ${commas(k.emailed)} emailed · ${commas(k.canEmail)} can email` : 'Not in the pipeline yet'}</h2></div></div>
-    ${k.imported ? '' : '<p class="sub" style="margin:0">Go brings in the exhibitors checked here, with the pipeline’s own rules.</p>'}
+    ${k.imported ? '' : '<p class="sub" style="margin:0">Go brings in the exhibitors checked here that you can email, with the pipeline’s own rules.</p>'}
     ${facts.length ? `<ul class="pipe-facts">${facts.join('')}</ul>` : ''}${deps}
     ${!d.pipelineReady ? '<p class="note" style="margin:0">To use Go, add PIPELINE_URL and SHEET_SECRET to HQ’s Script Properties.</p>' : ''}
     ${pp.err ? `<p class="note" style="margin:0">Couldn’t look again just now: ${esc(pp.err)}</p>` : ''}
@@ -717,8 +718,8 @@ function rowsHtml(s) {
   const shown = list.slice(0, X.limit);
   if (!shown.length) return pipeF && !pipeData(s.id) ? '<p class="sub" style="margin:0"><span class="spinner"></span> Reading the pipeline…</p>' : '<p class="sub" style="margin:0">No exhibitors match. Clear the search or choose All.</p>';
   return `<div class="tbox"><table class="xt xrows"><thead><tr><th scope="col">Exhibitor</th><th scope="col">Stand</th><th scope="col">Can email</th><th scope="col">Email</th><th scope="col">Company</th><th scope="col">Pipeline</th></tr></thead><tbody>
-    ${shown.map((r) => { const st = C.statusOf(r), n = C.listedCount(r); return `<tr data-xrow="${esc(r.id)}" tabindex="0"${X.sel === r.id ? ' class="sel" aria-selected="true"' : ''}>
-      <td><div class="nm"><b>${esc(r.name)}</b><span>${esc([r.category, n >= 2 ? `in ${n} exhibitions` : '', !r.category ? r.domain : ''].filter(Boolean).join(' · '))}</span></div></td>
+    ${shown.map((r) => { const st = C.statusOf(r), n = C.listedCount(r), gone = !!pipeRow(r); return `<tr data-xrow="${esc(r.id)}" tabindex="0"${X.sel === r.id || gone ? ` class="${[X.sel === r.id ? 'sel' : '', gone ? 'gone' : ''].filter(Boolean).join(' ')}"` : ''}${X.sel === r.id ? ' aria-selected="true"' : ''}>
+      <td><div class="nm"><b>${esc(r.name)}</b><span>${esc([gone ? 'In the pipeline' : '', r.category, n >= 2 ? `in ${n} exhibitions` : '', !r.category ? r.domain : ''].filter(Boolean).join(' · '))}</span></div></td>
       <td class="mono muted">${esc(r.stand || '')}</td>
       <td><span class="st-txt"><span class="sd ${STATUS_DOT[st]}"></span>${esc(C.STATUS_LABEL[st])}</span></td>
       <td class="muted">${esc(C.workspaceShort(r) || '–')}</td>
@@ -747,6 +748,7 @@ function detailHtml() {
     <p class="sub" style="margin:0;font-size:13px">${esc(C.emailRule(r))}</p>
     ${needsAnswer ? `<div class="ask"><p>Companies House has a ${r.legal === 'likely' ? 'likely' : 'possible'} match: <b>${esc(r.companyName || '')}</b>. Is it the same business?</p>
       <div class="row-acts"><button class="btn small light" type="button" data-xa="match-yes" data-id="${esc(r.id)}">Yes, same company</button><button class="btn small" type="button" data-xa="match-no" data-id="${esc(r.id)}">No, a different one</button></div></div>` : ''}
+    ${decideHtml(r)}
     ${yourCallHtml(r)}
     <div class="d-sec"><span class="eyebrow">Contact</span><dl class="kv">
       ${kv('Email', r.email ? `<span class="copy">${link('mailto:' + r.email, r.email)}${copy(r.email, 'Email')}</span>` : '', [C.emailKindLabel(r.emailKind), r.emailSrc ? 'from ' + r.emailSrc : ''].filter(Boolean).join(', '))}
@@ -767,10 +769,67 @@ function detailHtml() {
     <div class="row-acts d-foot"><button class="btn small" type="button" data-xa="edit-row" data-id="${esc(r.id)}">Edit details</button><button class="btn small" type="button" data-xa="recheck" data-id="${esc(r.id)}">Check again</button>
       ${done ? `<button class="btn small" type="button" data-xa="explain" data-id="${esc(r.id)}">Why this result?</button>` : ''}<button class="btn small danger" type="button" data-xa="remove-row" data-id="${esc(r.id)}">Remove</button></div>`;
 }
+/** Release 11: Go brings in only those you can email, so the call is made here: the company, or consent you got. */
+function decideHtml(r) {
+  if (C.statusOf(r) === 'pending') return '';
+  if (C.hasConsent(r)) {
+    return `<div class="d-sec"><span class="eyebrow">Consent</span><p class="sub" style="margin:0">Given ${esc(String(r.consentHow || '').toLowerCase())} on ${esc(C.fmtDates(r.consentAt))}, as you recorded it.</p>
+      <button class="btn small" type="button" data-xa="consent-clear" data-id="${esc(r.id)}" style="align-self:flex-start">Remove consent</button></div>`;
+  }
+  const st = C.statusOf(r);
+  if (st === 'corporate') return '';
+  const asked = r.legal === 'likely' || r.legal === 'possible';
+  return `<div class="yourcall"><span class="t-top"><span class="t-tag">YOUR CALL · BEFORE GO</span></span><b class="t-title">${st === 'check' ? 'To check' : 'Consent needed'}: Go leaves them here</b>
+    <p class="t-sub">${asked ? 'Confirm the company above if it’s theirs. ' : 'If it’s a limited company, find it on Companies House below. '}Or, if they’ve said yes to emails, record their consent. Then Go brings them into the pipeline.</p>
+    <div class="row-acts">${asked ? '' : `<button class="btn small dark" type="button" data-xa="find-co" data-id="${esc(r.id)}">Find the limited company</button>`}<button class="btn small" type="button" data-xa="consent" data-id="${esc(r.id)}">Consent given…</button></div></div>`;
+}
+function openConsent(r) {
+  const HOW = ['At the stand', 'By email', 'By phone', 'In writing'];
+  openDialog(`${dhead('Consent given', r.name)}<p class="sub" style="margin:0">Only record consent they gave you themselves. It’s kept with the exhibitor, and Go brings them into the pipeline as “Yes (consent)”.</p>
+    <form id="xconsent" data-id="${esc(r.id)}" novalidate class="stack14">
+      <div class="grid2"><div class="field"><label for="cg-how">How</label><select class="input" id="cg-how" name="how">${HOW.map((h) => `<option>${esc(h)}</option>`).join('')}</select></div>
+      <div class="field"><label for="cg-at">When</label><input class="input" id="cg-at" name="at" type="date" value="${today()}" max="${today()}" required></div></div>
+      ${r.email ? `<p class="note" style="margin:0">Emails go to ${esc(r.email)}.</p>` : '<p class="note" style="margin:0">There’s no email address for them yet: add it with Edit details first.</p>'}
+      <div class="actions d-acts"><button class="btn" type="button" data-xa="close">Cancel</button><button class="btn yellow" type="submit"${r.email ? '' : ' disabled'}>Record consent</button></div></form>`);
+}
+async function saveConsent(r, body, btn) {
+  await withBusy(btn, async () => {
+    let j;
+    try { j = await el('giveConsent', Object.assign({ id: r.id }, body)); }
+    catch (e) { toast(errText(e), true, 8000); return; }
+    mergeRows(j.row.showId || X.route.id, [j.row]);
+    closeDialog(); updateShowParts();
+    // What the pipeline has for them now: read it again (Go may have run elsewhere since)
+    await loadPipe(r.showId);
+    const d = (X.pipe[r.showId] || {}).err ? null : pipeData(r.showId), pr = d && pipeRow(rowById(r.id) || r), onConsent = !!pr && pr.can === 'Yes (consent)';
+    if (body.clear) {
+      // Already in the pipeline on consent: stop it there too
+      if (!d) { toast('Consent removed here, but the pipeline couldn’t be read. Press Go again: it stops their row if it’s in on consent.', true, 9000); return; }
+      if (onConsent) { try { await setCanEmail(rowById(r.id) || r, 'Consent needed', 'Yes (consent)', true); } catch (e) { toast('Removed here, but the pipeline row wasn’t changed: ' + errText(e) + '. Press Go again: it stops it.', true, 9000); return; } }
+      toast(onConsent ? 'Consent removed, and the pipeline won’t email them now' : 'Consent removed', false, 6000);
+    } else {
+      const liftable = pr && (pr.can === 'Check' || pr.can === 'Consent needed') && !pr.touches && !pr.batch && String(pr.stage || 'New') === 'New';
+      toast(!pr ? 'Consent recorded. Go again brings them into the pipeline'
+        : liftable ? 'Consent recorded. Go again moves their pipeline row to Yes (consent)'
+        : /^Yes/.test(pr.can) ? 'Consent recorded. They’re in the pipeline already, as ' + pr.can
+        : 'Consent recorded here. Their pipeline row has been emailed or is in a batch, so Go leaves it: change Can email in the sheet if it should go', false, 7000);
+    }
+  });
+}
+/** Consent gone (a new address): a pipeline row in on consent stops too, read fresh first. */
+async function stopOnConsent(row, said) {
+  const r = rowById(row.id) || row;
+  await loadPipe(r.showId);
+  const d = (X.pipe[r.showId] || {}).err ? null : pipeData(r.showId), pr = d && pipeRow(r);
+  if (!d) { toast(said + '. The pipeline couldn’t be read: press Go again, and it stops their row if it’s in on consent.', true, 9000); return; }
+  if (!pr || pr.can !== 'Yes (consent)') { toast(said, false, 8000); return; }
+  try { await setCanEmail(r, 'Consent needed', 'Yes (consent)', true); toast(said + ', and the pipeline won’t email them now', false, 8000); }
+  catch (e) { toast(said + ', but the pipeline row wasn’t changed: ' + errText(e) + '. Press Go again: it stops it.', true, 9000); }
+}
 function yourCallHtml(r) {
   const d = pipeData(r.showId), pr = pipeRow(r);
   if (!d) return `<div class="d-sec"><span class="eyebrow">In the pipeline</span><p class="sub" style="margin:0">${(X.pipe[r.showId] || {}).err ? esc(X.pipe[r.showId].err) : 'Reading the pipeline…'}</p></div>`;
-  if (!pr) return `<div class="d-sec"><span class="eyebrow">In the pipeline</span><p class="sub" style="margin:0">Not in the pipeline. ${C.statusOf(r) === 'pending' ? 'Once it’s checked here, Go brings it in.' : 'Go brings it in, if the pipeline’s rules allow.'}</p></div>`;
+  if (!pr) return `<div class="d-sec"><span class="eyebrow">In the pipeline</span><p class="sub" style="margin:0">Not in the pipeline. ${C.statusOf(r) === 'pending' ? 'Once it’s checked here, Go brings it in if it can be emailed.' : C.statusOf(r) === 'corporate' ? 'Go brings it in, if the pipeline’s rules allow.' : 'Go leaves it here until you decide above.'}</p></div>`;
   const facts = `CODE ${esc(String(pr.code).toUpperCase())} · STAGE ${esc(String(pr.stage).toUpperCase())}${pr.touches ? ` · ${pr.touches} EMAIL${pr.touches > 1 ? 'S' : ''} SENT` : ''}${pr.batch ? ` · ${esc(pr.batch)}` : ''}`;
   if (needsCall(pr)) {
     return `<div class="yourcall"><span class="t-top"><span class="t-tag">IN THE PIPELINE · YOUR CALL</span></span><b class="t-title">Can email: Check${pr.priority ? ` (${esc(pr.priority)})` : ''}</b>
@@ -779,7 +838,9 @@ function yourCallHtml(r) {
       <span class="t-sub mono-sm">${facts}</span></div>`;
   }
   return `<div class="d-sec"><span class="eyebrow">In the pipeline</span><dl class="kv">${kv('Can email', esc(pr.can), pr.priority ? 'Priority ' + pr.priority : '')}${pr.why ? kv('Next', esc(pr.why), pr.due ? 'Due ' + C.fmtDates(pr.due) : '') : ''}</dl>
-    <span class="note mono-sm">${facts}</span>${pr.can === 'Yes (Ltd)' ? `<button class="btn small" type="button" data-xa="pipe-down" data-id="${esc(r.id)}" style="align-self:flex-start">Not a limited company? Consent needed</button>` : ''}</div>`;
+    <span class="note mono-sm">${facts}</span>${pr.can === 'Yes (Ltd)' ? `<button class="btn small" type="button" data-xa="pipe-down" data-id="${esc(r.id)}" style="align-self:flex-start">Not a limited company? Consent needed</button>`
+      : pr.can === 'Yes (consent)' && C.hasConsent(r) ? `<button class="btn small" type="button" data-xa="consent-clear" data-stop="1" data-id="${esc(r.id)}" style="align-self:flex-start">Stop: remove their consent</button>`
+      : pr.can === 'Yes (consent)' ? `<button class="btn small" type="button" data-xa="pipe-down-consent" data-id="${esc(r.id)}" style="align-self:flex-start">Stop: Consent needed</button>` : ''}</div>`;
 }
 
 /* ---------- Your calls on "Check" rows, made in the pipeline ---------- */
@@ -790,7 +851,7 @@ async function setCanEmail(r, value, expect, quiet) {
   api.overviewStale();
   const ce = j.canEmail || {};
   pr.can = value; if (ce.priority) pr.priority = ce.priority;
-  const d = pipeData(r.showId), bucket = (v) => (v === 'Yes (Ltd)' ? 'canEmail' : v === 'Check' ? 'check' : 'consent');
+  const d = pipeData(r.showId), bucket = (v) => (/^Yes/.test(v) ? 'canEmail' : v === 'Check' ? 'check' : 'consent');
   if (d && d.counts) { d.counts[bucket(expect)] = Math.max(0, (d.counts[bucket(expect)] || 0) - 1); d.counts[bucket(value)] = (d.counts[bucket(value)] || 0) + 1; }
   const also = j.twins ? ` (and ${plural(j.twins, 'other row')} of the same business)` : '';
   if (!quiet) toast((value === 'Yes (Ltd)' ? `${r.name}: the pipeline can email them now (${ce.priority || pr.priority || 'Yes (Ltd)'})` : value === 'Check' ? `${r.name}: held as Check, so no emails until you decide` : `${r.name}: consent needed, so no cold emails`) + also, false, 6000);
@@ -818,13 +879,13 @@ function openGo(s) {
   const d = pipeData(s.id) || {}, sh = d.show, p = pipeSum(s.id);
   const going = sh ? 'keep' : 'no';
   openDialog(`${dhead(sh || (p && p.imported) ? 'Go again' : 'Go', 'Go · ' + (s.sector || ''))}
-    <p class="sub" style="margin:0">Brings <b style="color:var(--text)">${esc(s.name)}</b>’s checked exhibitors into the pipeline with its own rules: Can email, priority, sectors, opt-outs and duplicates, as Import a show does. Nothing is emailed.</p>
+    <p class="sub" style="margin:0">Brings <b style="color:var(--text)">${esc(s.name)}</b>’s exhibitors you can email into the pipeline: limited companies, and those whose consent you’ve recorded. To check and Consent needed stay here until you decide. The pipeline’s own rules still apply (priority, sectors, opt-outs, duplicates). Nothing is emailed.</p>
     <form id="xgo" data-id="${esc(s.id)}" novalidate class="stack14">
       <div class="field"><label for="go-name">Show name in the pipeline</label><input class="input" id="go-name" name="name" maxlength="120" value="${esc(sh ? sh.name : s.name)}"><span class="hint">What the emails call it.</span></div>
       <div class="grid2"><div class="field"><label for="go-going">Are you going?</label><select class="input" id="go-going" name="going">${sh ? '<option value="keep" selected>Keep as it is</option>' : ''}<option value="no"${going === 'no' ? ' selected' : ''}>No</option><option value="yes">Yes, I’m going</option></select></div>
       <div class="field"><label for="go-days">Which days</label><input class="input" id="go-days" name="days" maxlength="60" placeholder="All, or for example Sat 7 Nov" value="${esc(sh && sh.visitDay ? sh.visitDay : '')}"></div></div>
       <div class="field"><label for="go-page">Landing page</label><input class="input mono" id="go-page" name="page" maxlength="40" autocapitalize="off" spellcheck="false" placeholder="The sector’s own, such as crafts" value="${esc(sh && sh.page ? sh.page : '')}"><span class="hint">The showsum page the emails link to. Leave it empty for the sector’s own.</span></div>
-      <label class="check-line"><input type="checkbox" name="fast" checked><span><b>Make a fast-lane batch</b> of the P1 and P2 ones due a first email. It waits on the Departures board: check Members, then Start.</span></label>
+      <label class="check-line"><input type="checkbox" name="fast" checked><span><b>Make a fast-lane batch</b> of everyone due a first email: Email A or B, or Day 2 after the show once the first emails have closed. It waits on the Departures board: check Members, then Start.</span></label>
       <div class="actions d-acts"><button class="btn" type="button" data-xa="close">Cancel</button><button class="btn yellow" type="submit">Go</button></div></form>`);
 }
 async function submitGo(f) {
@@ -842,10 +903,10 @@ async function submitGo(f) {
   });
 }
 function openGoResult(s, j, asked) {
-  const g = j.go || {}, fast = j.fast, t = g.tally || {};
+  const g = j.go || {}, fast = j.fast, t = g.tally || {}, ny = Object.assign({ check: 0, consent: 0, noEmail: 0 }, g.notYet || {});
   const li = (n, text) => (n ? `<li><b>${commas(n)}</b> ${esc(text)}</li>` : '');
-  const fastLine = !asked ? '' : fast && fast.id ? `<div class="dep-chip idle"><div><b>Fast-lane batch ${esc(fast.id)}</b><span>${esc(plural(fast.size, 'business', 'businesses'))} · not started: check Members, then Start</span></div><span class="chip dim">Ready</span></div>`
-    : fast && fast.error ? `<p class="note" style="margin:0">The fast-lane batch wasn’t made: ${esc(fast.error)}</p>` : '<p class="note" style="margin:0">No fast-lane batch: no P1 or P2 business is due a first email outside a batch.</p>';
+  const fastLine = !asked ? '' : fast && fast.id ? `<div class="dep-chip idle"><div><b>Fast-lane batch ${esc(fast.id)}</b><span>${esc(plural(fast.size, 'business', 'businesses'))}${fast.step === 'day2' ? ' · Day 2 as their first email, after the show' : ''} · not started: check Members, then Start</span></div><span class="chip dim">Ready</span></div>`
+    : fast && fast.error ? `<p class="note" style="margin:0">The fast-lane batch wasn’t made: ${esc(fast.error)}</p>` : '<p class="note" style="margin:0">No fast-lane batch: nobody is due a first email outside a batch.</p>';
   openDialog(`${dhead('Done: ' + (g.showName || s.name), 'Go')}
     <ul class="pipe-facts">
       <li><b>${commas(g.fresh || 0)}</b> new businesses in the pipeline</li>
@@ -853,8 +914,10 @@ function openGoResult(s, j, asked) {
       ${li(g.refreshed, 'already here and now Yes (Ltd), from the checks in Exhibitor Leads')}${li(g.held, 'already here and now not emailed, as you decided in Exhibitor Leads')}
       ${li(g.twins, 'more rows of those businesses, from other shows, held the same way')}${li(g.here, 'were already in this show')}${li(g.merged, 'extra listings for the same business, merged')}
       ${li(g.optedOut, 'kept out because their email opted out')}${li(g.waiting, 'still being checked in Exhibitor Leads: Go again once they’re done')}${li(g.moved, 'left as they were: Prospects moved while saving, so Go again')}
+      ${ny.check + ny.consent + ny.noEmail ? `<li><b>${commas(ny.check + ny.consent + ny.noEmail)}</b> left here until you decide: ${esc([ny.check ? ny.check + ' to check' : '', ny.consent ? ny.consent + ' consent needed' : '', ny.noEmail ? ny.noEmail + ' with no email' : ''].filter(Boolean).join(', '))}</li>` : ''}
       <li>P1 <b>${commas(t.P1)}</b> · P2 <b>${commas(t.P2)}</b> · P3 <b>${commas(t.P3)}</b> · P4 <b>${commas(t.P4)}</b> · P5 <b>${commas(t.P5)}</b></li>
       <li>${g.going ? `Going${g.days && g.days !== 'all' ? ': ' + esc(g.days) : ''}` : 'Not going'}${g.page ? ` · links open /showsum/${esc(g.page)}/` : ''}</li></ul>
+    ${!(g.fix >= 48) ? '<p class="banner" style="margin:0"><span class="grow">The pipeline’s script is older than fix-48, so To check and Consent needed came in too. Paste its new script, then use Tidy in Settings.</span></p>' : ''}
     ${fastLine}
     <div class="actions d-acts"><button class="btn" type="button" data-xa="close">Done</button><a class="btn yellow" href="#/overview" data-xa="close">Open the Departures board</a></div>`);
 }
@@ -1246,6 +1309,12 @@ async function onSubmit(e) {
     closeFind(); go(hashFor.sector(r.sector));
   } else if (f.id === 'xshow') submitShow(f);
   else if (f.id === 'xgo') submitGo(f);
+  else if (f.id === 'xconsent') {
+    const r = rowById(f.dataset.id);
+    if (!r) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(f.at.value) || f.at.value > today()) { toast('Give the date they gave consent, not a future one', true); return; }
+    await saveConsent(r, { how: f.how.value, at: f.at.value }, f.querySelector('[type=submit]'));
+  }
   else if (f.id === 'xpaste') {
     const text = f.text.value.trim();
     if (!text) { toast('Paste at least one name', true); return; }
@@ -1262,7 +1331,12 @@ async function onSubmit(e) {
     const patch = {};
     ['contact', 'email', 'phone', 'website', 'note'].forEach((k) => { patch[k] = f[k].value.trim(); });
     await withBusy(f.querySelector('[type=submit]'), async () => {
-      try { const j = await el('editRow', { id: f.dataset.id, patch }); mergeRows(j.row.showId || X.route.id, [j.row]); closeDialog(); updateShowParts(); toast('Saved'); E.userPaused = false; ensureChecking(); }
+      try {
+        const j = await el('editRow', { id: f.dataset.id, patch }); mergeRows(j.row.showId || X.route.id, [j.row]); closeDialog(); updateShowParts();
+        if (j.consentCleared) await stopOnConsent(j.row, 'Saved. Their consent was for the old address, so it was removed: record it again if they agreed for this one');
+        else toast('Saved');
+        E.userPaused = false; ensureChecking();
+      }
       catch (err) { toast(errText(err), true); }
     });
   } else if (f.id === 'xcono') {
@@ -1351,6 +1425,9 @@ async function act(name, t) {
     case 'copy-why': toast((await copyText(X.whyText || '')) ? 'Copied' : 'Couldn’t copy. Select the text and copy instead'); break;
     case 'match-yes': case 'match-no': await withBusy(t, async () => { try { const j = await el('confirmMatch', { id: d.id, yes: name === 'match-yes' }); mergeRows(j.row.showId || X.route.id, [j.row]); updateShowParts(); toast(name === 'match-yes' ? 'Confirmed as the same company' : 'Marked as no company'); followConfirm(j.row); } catch (e) { toast(errText(e), true); } }); break;
     case 'find-co': openPicker(d.id); break;
+    case 'consent': { const r = rowById(d.id); if (r) openConsent(r); break; }
+    case 'consent-clear': openConfirm('Remove their consent?', 'Go won’t bring them in again, and if they’re in the pipeline on consent, it stops emailing them.', 'consent-clear-yes', 'Remove consent', d.id, true); break;
+    case 'consent-clear-yes': { const r = rowById(d.id); if (r) await saveConsent(r, { clear: true }, t); break; }
     case 'company-no': openCompanyNo(d.id); break;
     case 'pick-co': openPickConfirm(+d.i); break;
     case 'pick-back': if (X.pick) openPicker(X.pick.id, X.pick); break;
@@ -1361,6 +1438,7 @@ async function act(name, t) {
     case 'remove-row': openConfirm('Remove this business?', 'It will be removed from this exhibition in the Exhibitor Leads sheet.', 'remove-row-yes', 'Remove', d.id, true); break;
     case 'remove-row-yes': await withBusy(t, async () => { try { await el('deleteRows', { ids: [d.id] }); const id = X.route.id; X.rows[id] = (X.rows[id] || []).filter((r) => r.id !== d.id); syncCounts(id); if (X.sel === d.id) X.sel = null; closeDialog(); updateShowParts(); toast('Removed'); } catch (e) { toast(errText(e), true); } }); break;
     case 'pipe-down': { const r = rowById(d.id); if (!r) break; await withBusy(t, async () => { try { await setCanEmail(r, 'Consent needed', 'Yes (Ltd)'); updateShowParts(); } catch (e) { toast(errText(e), true); } }); break; }
+    case 'pipe-down-consent': { const r = rowById(d.id); if (!r) break; await withBusy(t, async () => { try { await setCanEmail(r, 'Consent needed', 'Yes (consent)'); updateShowParts(); } catch (e) { toast(errText(e), true); } }); break; }
     case 'pipe-yes': case 'pipe-consent': case 'pipe-yes-sure': {
       const r = rowById(d.id);
       if (!r) break;
@@ -1493,6 +1571,7 @@ function reset() {
 window.HQX = {
   init(a) { api = a; },
   html, bind, settingsHtml, bindSettings, reset,
+  pipeStale() { X.pipe = {}; X.pipeAllAt = 0; },   // after the tidy in Settings: read the pipeline again on the next visit
   leave() { closeDialog(); },
 };
 })();

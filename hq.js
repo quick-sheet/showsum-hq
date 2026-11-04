@@ -2,8 +2,9 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 9;       // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
-  var EXPECT_BUILD = 9;      // the HQ Apps Script release this app expects
+  var APP_VERSION = 11;      // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
+  var EXPECT_BUILD = 11;     // the HQ Apps Script release this app expects
+  var AP_PLAN = 10;          // the pipeline's HQAutopilot.gs must be at least this release to send by HQ's current schedule
   var LS = { config: 'hq.config', links: 'hq.links', user: 'hq.user', name: 'hq.name' };
   var SS_TOKEN = 'hq.idToken';
   var GSI_SRC = 'https://accounts.google.com/gsi/client';
@@ -847,9 +848,10 @@
       else if (st.window === 'closed') due = 'window closed ' + fmtDay(st.closes);
       return '<li class="' + (st.ready && st.window === 'open' ? 'go' : '') + '"><b>First email</b> · ' + st.ready + ' ready' + (st.sent ? ', ' + st.sent + ' sent' : '') + (due ? ' · ' + esc(due) : '') + '</li>';
     }
-    if (st.key === 'day2') return '<li class="go"><b>Day 2 numbers</b> · ' + st.ready + ' ready, due from ' + esc(fmtDay(st.due)) + '</li>';
+    if (st.key === 'day2') return '<li class="go"><b>Day 2 numbers</b> · ' + st.ready + ' ready' + (st.fresh ? ' (' + st.fresh + ' not emailed before: Day 2 is their first)' : '') +
+      ', ' + esc(st.closes && dayDiff(st.closes) < 0 ? 'window closed ' + fmtDay(st.closes) : 'from ' + fmtDay(st.due) + (st.closes ? ' until ' + fmtDay(st.closes) : '')) + '</li>';
     if (st.key === 'last') return '<li' + (st.ready ? ' class="go"' : '') + '><b>Last touch</b> · ' + (st.ready ? st.ready + ' ready' : '') + (st.ready && st.waiting ? ', ' : '') + (st.waiting ? st.waiting + ' waiting, from ' + esc(fmtDay(st.due)) : '') + '</li>';
-    if (st.key === 'season') return '<li><b>Season planning</b> · ' + st.ready + ' not emailed before the show, for the 2nd week of January</li>';
+    if (st.key === 'season') return '<li><b>Season planning</b> · ' + st.ready + ' not emailed around the show, for the 2nd week of January</li>';
     return '';
   }
 
@@ -909,7 +911,7 @@
     var ahead = '<div class="ahead"><div class="panel-head"><div><span class="eyebrow">Next 3 weeks</span><h2 class="h3">Shows ahead</h2></div>' +
       (o.aheadMore ? '<span class="note">' + plural(o.aheadMore, 'more show') + ' after that</span>' : '') + '</div>' +
       (lanes ? '<div class="timeline"><div class="ticks" aria-hidden="true">' + ticks + '</div>' + lanes + '</div>' +
-        '<div class="legend small"><span><i class="k show"></i>Show days, in sector colour</span><span><i class="k win"></i>First-email window (14 to 4 days before)</span></div>'
+        '<div class="legend small"><span><i class="k show"></i>Show days, in sector colour</span><span><i class="k win"></i>First-email window (14 to 6 days before)</span></div>'
         : '<p class="note" style="margin:0">No shows in the next 3 weeks.</p>') +
       (o.aheadNote ? '<p class="note" style="margin:0">' + esc(o.aheadNote) + '</p>' : '') + '</div>';
     return '<section class="panel split" aria-label="Emails and shows ahead">' + emails + ahead + '</section>';
@@ -1000,18 +1002,23 @@
     var name = STEP_NAME[b.stage];
     if (b.dueNow) {
       var t = b.dueNow + ' ready for ' + name;
-      if (b.stage === 'first' && b.closes) {
-        if (dayDiff(b.closes) >= 0) t += ' · window open until ' + fmtDay(b.closes);
-        else if (b.starts && dayDiff(b.starts) > 0) t += ' · window closed ' + fmtDay(b.closes) + ': autopilot still sends until ' + fmtDay(ymdOf(new Date(ymdDate(b.starts).getTime() - 864e5))) + ', the day before the show';
-        else t += ' · the show has started: no more first emails (Season planning after it ends)';
-      }
+      if (b.closes) t += ' · window open until ' + fmtDay(b.closes);
+      if (b.stage === 'day2' && b.asFirst) t += ' · ' + b.asFirst + ' not emailed before: Day 2 is their first';
       return t;
     }
-    return name + ' from ' + fmtDay(b.nextDue);
+    return name + (b.nextDue ? ' from ' + fmtDay(b.nextDue) : '') + (b.stage === 'day2' && b.closes ? ' until ' + fmtDay(b.closes) : '') +
+      (b.stage === 'day2' && b.asFirst ? ' · ' + b.asFirst + ' not emailed before: Day 2 is their first' : '');
   }
 
   function stageTrack(b) {
-    var steps = b.startStep === 'Season planning' ? ['season', 'done'] : ['first', 'day2', 'last', 'done'];
+    // A Season planning batch whose never-emailed members are in a show's Day 2 window now (release 10) goes Day 2 first
+    var steps = ['first', 'day2', 'last', 'done'], sent = b.sent || {};
+    if (b.startStep === 'Season planning') {
+      var d2 = b.stage === 'day2' || b.stage === 'last' || sent.day2 || sent.last;
+      steps = d2 ? ['day2', 'last'] : [];
+      if (!d2 || b.stage === 'season' || sent.season || (b.counts || {}).season) steps.push('season');
+      steps.push('done');
+    }
     var at = steps.indexOf(b.stage);
     return '<ol class="track" aria-label="' + esc(b.label + ': ' + STEP_NAME[b.stage]) + '">' + steps.map(function (k, i) {
       var cls = i < at ? 'done' : i === at ? (b.dueNow ? 'now go' : 'now') : 'todo';
@@ -1039,7 +1046,7 @@
         '<span class="chip' + (b.dueNow ? ' warn' : b.stage === 'done' ? ' dim' : '') + '">' + esc(STEP_NAME[b.stage]) + '</span></div>' +
         stageTrack(b) +
         '<span class="sub small">' + esc(batchStatus(b)) + '</span>' +
-        '<span class="muted small">' + esc(plural(b.members, 'prospect') + ' · started at ' + b.startStep + (b.sent.first ? ' · ' + b.sent.first + ' first emails sent' : '') + (b.sent.day2 ? ', ' + b.sent.day2 + ' Day 2' : '') + (b.sent.last ? ', ' + b.sent.last + ' Last touch' : '') + (extra.length ? ' · ' + extra.join(', ') : '')) + '</span>' +
+        '<span class="muted small">' + esc(plural(b.members, 'prospect') + ' · started at ' + b.startStep + (b.sent.first ? ' · ' + b.sent.first + ' Email A/B sent' : '') + (b.sent.day2 ? ', ' + b.sent.day2 + ' Day 2' : '') + (b.sent.last ? ', ' + b.sent.last + ' Last touch' : '') + (extra.length ? ' · ' + extra.join(', ') : '')) + '</span>' +
         '<p class="how small">' + esc(apNote) + '</p>' +
         '<div class="dep-acts">' +
         (started ? '<button class="btn small" data-bpause="' + esc(b.id) + '">Pause</button>' : b.stage !== 'done' ? '<button class="btn small yellow" data-bstart="' + esc(b.id) + '">Start</button>' : '') +
@@ -1052,7 +1059,8 @@
     }).join('');
     var props = ps.map(function (p) {
       var when;
-      if (p.step === 'first') when = !p.closes ? '' : p.opens && dayDiff(p.opens) > 0 ? 'window opens ' + fmtDay(p.opens) : dayDiff(p.closes) >= 0 ? 'window open until ' + fmtDay(p.closes) : 'window closed ' + fmtDay(p.closes) + ', show starts ' + fmtDay(p.starts);
+      if (p.step === 'first') when = !p.closes ? '' : p.opens && dayDiff(p.opens) > 0 ? 'window opens ' + fmtDay(p.opens) : 'window open until ' + fmtDay(p.closes);
+      else if (p.step === 'day2' && p.closes) when = (dayDiff(p.opens) > 0 ? 'from ' + fmtDay(p.opens) + ' until ' : 'window open until ') + fmtDay(p.closes) + (p.fresh ? ' · ' + p.fresh + ' not emailed before: Day 2 is their first' : '');
       else if (p.step === 'season') when = 'for ' + fmtDay(p.due);
       else when = dayDiff(p.due) <= 0 ? 'due since ' + fmtDay(p.due) : 'due from ' + fmtDay(p.due);
       return '<div class="prop">' + lineDot(p.line, p.sector) + '<span class="prop-tx"><b>' + esc(p.show) + ' · ' + esc(p.stepLabel) + '</b><span class="muted small">' + esc(plural(p.count, 'prospect') + (when ? ' · ' + when : '')) + '</span></span>' +
@@ -1220,6 +1228,9 @@
     if (!ap.ticking) warn = ap.lastTick
       ? '<p class="banner" style="margin:0" role="alert"><span class="grow">The pipeline hasn’t looked in since ' + esc(timeLabel(ap.lastTick)) + ' ' + esc(clock(ap.lastTick)) + '. In its Apps Script, check the hqAutopilotTick trigger is there (Triggers), or run hqAutopilotSetUp again.</span></p>'
       : '<p class="note" style="margin:0">The pipeline first looks in within 10 minutes of running hqAutopilotSetUp. Refresh after that. If this is still here after 15 minutes, check the hqAutopilotTick trigger is there (Apps Script → Triggers).</p>';
+    // Release 10 changed which email goes when: an older HQAutopilot.gs still plans by the old schedule
+    if (ap.lastTick && !(ap.file >= AP_PLAN)) warn += '<p class="banner" style="margin:0" role="alert"><span class="grow">The pipeline’s HQAutopilot.gs is ' +
+      (ap.file ? 'from release ' + ap.file : 'an older one') + ', so it still sends by the old schedule, not the one shown here. Paste the new HQAutopilot.gs into the pipeline’s Apps Script; it reports in within 10 minutes.</span></p>';
     var check = '';
     if (ap.mode === 'off' && / · Stopped: /.test(ap.lastRun || '')) {
       check = '<p class="banner" style="margin:0" role="alert"><span class="grow"><b>Autopilot switched itself off.</b> ' + esc(ap.lastRun.split(' · Stopped: ')[1] || '') + '</span></p>';
@@ -1800,6 +1811,7 @@
     if (window.HQX) html += window.HQX.settingsHtml();
 
     html += autopilotSettings(st);
+    html += tidyPanel();
 
     // Script Properties checklist
     var props = (st && st.props) || S.props;
@@ -1861,8 +1873,39 @@
       '<div class="rows">' + watch + '</div>' + (wt.telegram ? '' : '<p class="note" style="margin:0">The watch tells you on Telegram: add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID first.</p>') + '</section>';
   }
 
+  // Release 11: Go brings in only those you can email; the tidy moves the rest that came in before, never emailed, out
+  function tidyPanel() {
+    var t = S.tidy, list = '';
+    if (t && t.shows && t.shows.length) list = '<div class="rows">' + t.shows.slice(0, 12).map(function (x) { return row(t.moved ? 'ok' : 'no', esc(x.show), plural(x.n, 'row')); }).join('') + '</div>';
+    var body = !t ? '<div class="actions"><button class="btn small" id="st-tidy-check">See what would move</button></div>'
+      : t.moved ? '<p class="note" style="margin:0">Moved ' + plural(t.moved, 'row') + ' to the Held back tab.</p>' + list
+      : !t.count ? '<p class="note" style="margin:0">Nothing to tidy: every row in Prospects can be emailed, has been, or is in a batch.</p>'
+      : list + '<div class="actions"><button class="btn small yellow" id="st-tidy-go">Move ' + plural(t.count, 'row') + ' to Held back</button><button class="btn small" id="st-tidy-check">Count again</button></div>';
+    return '<section class="panel" aria-labelledby="st-tidy-h"><div class="panel-head"><div><span class="eyebrow">Pipeline</span><h2 class="h3" id="st-tidy-h">Tidy: only those you can email</h2>' +
+      '<span class="sub small">Go now brings in only exhibitors you can email. Rows that came in before and were never emailed (To check, Consent needed, no email; Stage New, in no batch) move to a Held back tab in the pipeline sheet, every column kept. Rows whose Can email you changed yourself stay. Once you decide in Exhibitors, Go brings them in again. Switch autopilot Off first, and don’t send from the Showsum menu meanwhile.</span></div></div>' + body + '</section>';
+  }
+
   function bindSettings() {
     var on = function (id, fn) { var el = $(id); if (el) el.onclick = fn; };
+    on('#st-tidy-check', function (ev) {
+      var b = ev.currentTarget, gen = S.gen; b.disabled = true;
+      call('tidyPipeline', { dry: true }, { timeout: 60000 }).then(function (j) {
+        if (gen !== S.gen) return;
+        S.tidy = j.tidy; if (S.route === 'settings') renderRoute();
+      }, function (e) { b.disabled = false; toast(e.message, true); });
+    });
+    on('#st-tidy-go', function (ev) {
+      var b = ev.currentTarget, gen = S.gen, n = S.tidy ? S.tidy.count : 0;
+      if (!window.confirm('Move ' + plural(n, 'row') + ' from Prospects to the Held back tab? None of them has been emailed.')) return;
+      b.disabled = true;
+      call('tidyPipeline', { dry: false }, { timeout: 120000 }).then(function (j) {
+        if (gen !== S.gen) return;
+        S.tidy = j.tidy; S.ovDirty = true;
+        if (window.HQX && window.HQX.pipeStale) window.HQX.pipeStale();
+        if (S.route === 'settings') renderRoute();
+        toast('Moved ' + plural(j.tidy.moved, 'row') + ' to Held back');
+      }, function (e) { b.disabled = false; toast(e.kind === 'signin' ? 'Sign in again, then tidy.' : e.message, true); });
+    });
     on('#st-signout', signOut);
     on('#st-change', function () { renderConnect(); });
     on('#st-forget', function () {
