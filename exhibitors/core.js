@@ -84,6 +84,9 @@
 
   /** Consent you recorded (release 20): only with the date it was given, as Exhibitor Leads saves it. */
   const hasConsent = (row) => !!row && /^\d{4}-\d{2}-\d{2}$/.test(String(row.consentAt || ''));
+  /** Kept out by you (release 21): Not a fit, Not now or Not a UK company. Go leaves them out. */
+  const KEEP_OUT = ['Not a fit', 'Not now', 'Not a UK company'];
+  const keptOut = (row) => (!!row && KEEP_OUT.indexOf(String(row.keepOut || '')) >= 0 ? String(row.keepOut) : '');
   function statusOf(row) {
     if (!row || (row.state !== 'done' && row.state !== 'error')) return 'pending';
     // Consent you recorded (release 20) means they can be emailed, whatever the company check says
@@ -100,13 +103,14 @@
 
   /** The same tallies the Apps Script keeps, worked out here so the screen can update while checks run. */
   function countRows(rows) {
-    const c = { total: 0, done: 0, corporate: 0, consented: 0, consent: 0, check: 0, google: 0, microsoft: 0, pending: 0, likely: 0, unread: 0 };
+    const c = { total: 0, done: 0, corporate: 0, consented: 0, consent: 0, check: 0, out: 0, google: 0, microsoft: 0, pending: 0, likely: 0, unread: 0 };
     (rows || []).forEach((r) => {
       c.total++;
       const st = statusOf(r);
       if (st === 'pending') { c.pending++; return; }
-      c.done++; c[st]++;
-      if (st === 'corporate' && hasConsent(r) && r.emailable !== 'corporate') c.consented++;   // in Can email, on consent
+      c.done++;
+      if (keptOut(r)) c.out++; else c[st]++;
+      if (!keptOut(r) && st === 'corporate' && hasConsent(r) && r.emailable !== 'corporate') c.consented++;   // in Can email, on consent
       if (isGoogle(r)) c.google++;
       else if (isMicrosoft(r)) c.microsoft++;
       if (isUnread(r)) c.unread++;
@@ -202,6 +206,7 @@
     { id: 'corporate', label: 'Can email' },
     { id: 'check', label: 'To check' },
     { id: 'consent', label: 'Consent needed' },
+    { id: 'out', label: 'Kept out' },
     { id: 'google', label: 'Google' },
     { id: 'microsoft', label: 'Microsoft' },
     { id: 'unread', label: 'Couldn\u2019t read' },
@@ -216,6 +221,8 @@
       if (f === 'google') return isGoogle(r) && statusOf(r) !== 'pending';   // the same leads the count shows
       if (f === 'microsoft') return isMicrosoft(r) && statusOf(r) !== 'pending';
       if (f === 'unread') return isUnread(r);
+      if (f === 'out') return !!keptOut(r);
+      if ((f === 'corporate' || f === 'check' || f === 'consent') && keptOut(r)) return false;   // counted as kept out, not here
       if (f !== 'all' && statusOf(r) !== f) return false;
       return true;
     });
@@ -638,7 +645,7 @@
 
   const CAN_TXT = { corporate: 'Yes, corporate subscriber', check: 'Check first', consent: 'No, get consent first', pending: 'Not checked yet' };
   // Release 20: consent you recorded, with how and when, for a business that isn't a confirmed limited company
-  const canTxt = (r, st) => (st === 'corporate' && hasConsent(r) && r.emailable !== 'corporate' ? `Yes, consent given ${String(r.consentHow || '').toLowerCase()} on ${r.consentAt}` : CAN_TXT[st]);
+  const canTxt = (r, st) => (keptOut(r) ? 'No, kept out: ' + keptOut(r) : st === 'corporate' && hasConsent(r) && r.emailable !== 'corporate' ? `Yes, consent given ${String(r.consentHow || '').toLowerCase()} on ${r.consentAt}` : CAN_TXT[st]);
   const MATCH_TXT = { verified: 'Confirmed', likely: 'Likely', possible: 'Possible', none: 'None found' };
   const WS_TXT = { yes: 'Yes', likely: 'Probably', no: 'No', unknown: 'Unknown' };
 
@@ -920,7 +927,7 @@
 
   return {
     esc, plural, dayNum, todayIso, GROUPS, showGroup, groupShows, fmtDates, ago,
-    STATUS_LABEL, statusOf, hasConsent, isGoogle, isMicrosoft, providerOf, countRows, workspaceShort, workspaceLabel, rowSub, rowParts, companyTypeLabel, companyUrl, legalLabel, emailRule, emailKindLabel,
+    STATUS_LABEL, statusOf, hasConsent, keptOut, KEEP_OUT, isGoogle, isMicrosoft, providerOf, countRows, workspaceShort, workspaceLabel, rowSub, rowParts, companyTypeLabel, companyUrl, legalLabel, emailRule, emailKindLabel,
     FILTERS, filterRows, filterCount, summary, isUnread, shares, listedIn, listedCount, reachSummary, makeTopic, showFromHash,
     SECTOR_PRESETS, cleanSector, matchSector, sectorsFrom, searchLinks,
     validUrl, linkBoxKind, whereParts, parseShared, isDirectory, finderPages, tileFor, mapsUrl, searchText, validApiUrl, slug,

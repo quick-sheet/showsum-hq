@@ -568,7 +568,7 @@ a.kpi:hover { transform: translateY(-2px); border-color: var(--line-2); }
 .lbar { display: flex; gap: 3px; height: 12px; min-width: 0; }
 .lbar i { display: block; height: 100%; border-radius: 3px; min-width: 3px; }
 .lbar.thin { height: 8px; }
-.ok-bg { background: var(--mint); } .check-bg { background: var(--amber); } .consent-bg { background: var(--coral); } .pending-bg { background: var(--stripe); }
+.ok-bg { background: var(--mint); } .check-bg { background: var(--amber); } .consent-bg { background: var(--coral); } .pending-bg { background: var(--stripe); } .out-bg { background: var(--muted); }
 .g-bg { background: var(--sky); } .m-bg { background: var(--lilac); } .o-bg { background: var(--line-2); }
 .keys { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--sub); }
 .keys span { display: inline-flex; align-items: center; gap: 7px; }

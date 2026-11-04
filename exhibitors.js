@@ -16,7 +16,7 @@ const X = {
   route: { v: 'home' }, routeKey: '', filter: 'all', nextFilter: '', statusAt: 0, statusErr: '', diaryLoading: {}, q: '', limit: 200, sel: null, pick: null, whyText: '', shared: null,
 };
 const E = { running: false, stop: false, showId: null, idle: 0, userPaused: false };
-const EXPECT_EL = 20;   // release 20: consent you record (giveConsent)
+const EXPECT_EL = 21;   // release 20: consent you record (giveConsent); release 21: keep out (setKeepOut)
 const STEP_WORDS = { first: 'First email', day2: 'Day 2', last: 'Last touch', season: 'Season planning', done: 'Done' };
 const PIPE_FILTERS = [{ id: 'pipe-in', label: 'In pipeline' }, { id: 'pipe-check', label: 'Your call' }, { id: 'pipe-out', label: 'Not in pipeline' }];
 
@@ -628,8 +628,8 @@ function leadPanel(s, c, running) {
   return `<section class="panel" aria-labelledby="lead-h"><div class="panel-head"><div><span class="eyebrow${c.pending ? ' live' : ''}">${c.pending ? `<span class="pulse${running ? '' : ' off'}"></span>Exhibitors · checking` : 'Exhibitors · all checked'}</span><h2 class="h3" id="lead-h">${plural(c.total, 'exhibitor')}, ${commas(c.corporate)} you can email</h2></div>
     ${c.pending ? `<button class="run-btn${running ? '' : ' off'}" type="button" data-xa="${running ? 'pause' : 'resume'}" aria-label="${running ? 'Pause checking' : 'Keep checking'}">${running ? I.pause : I.play}</button>` : ''}</div>
     ${c.pending ? `<p class="sub" style="margin:0">${commas(c.done)} of ${commas(c.total)} checked · ${esc(C.waitingLine(c.pending, per, running))}</p>` : ''}
-    <div class="stack8"><div class="lbar" role="img" aria-label="${esc(`Can email ${c.corporate}, to check ${c.check}, consent needed ${c.consent}${c.pending ? ', waiting ' + c.pending : ''}`)}">${bars([['ok-bg', c.corporate], ['check-bg', c.check], ['consent-bg', c.consent], ['pending-bg', c.pending]])}</div>
-    <div class="keys"><span><i class="ok-bg"></i><b>${commas(c.corporate)}</b> can email</span><span><i class="check-bg"></i><b>${commas(c.check)}</b> to check</span><span><i class="consent-bg"></i><b>${commas(c.consent)}</b> consent needed</span></div></div>
+    <div class="stack8"><div class="lbar" role="img" aria-label="${esc(`Can email ${c.corporate}, to check ${c.check}, consent needed ${c.consent}${c.pending ? ', waiting ' + c.pending : ''}`)}">${bars([['ok-bg', c.corporate], ['check-bg', c.check], ['consent-bg', c.consent], ['out-bg', c.out || 0], ['pending-bg', c.pending]])}</div>
+    <div class="keys"><span><i class="ok-bg"></i><b>${commas(c.corporate)}</b> can email</span><span><i class="check-bg"></i><b>${commas(c.check)}</b> to check</span><span><i class="consent-bg"></i><b>${commas(c.consent)}</b> consent needed</span>${c.out ? `<span><i class="out-bg"></i><b>${commas(c.out)}</b> kept out</span>` : ''}</div></div>
     <div class="stack8"><div class="lbar thin" role="img" aria-label="${esc(`Google ${c.google}, Microsoft ${c.microsoft}, other ${other}`)}">${bars([['g-bg', c.google], ['m-bg', c.microsoft], ['o-bg', other]])}</div>
     <div class="keys"><span><i class="g-bg"></i><b>${commas(c.google)}</b> Google</span><span><i class="m-bg"></i><b>${commas(c.microsoft)}</b> Microsoft</span><span><i class="o-bg"></i><b>${commas(other)}</b> other</span></div></div></section>`;
 }
@@ -639,6 +639,7 @@ function pipePanel(s, c) {
   if (!d) return `<section class="panel">${top}<h2 class="h3">${pp.err ? 'Couldn’t read the pipeline' : 'Reading the pipeline…'}</h2></div></div>${pp.err ? `<p class="sub" style="margin:0">${esc(pp.err)}</p><button class="btn small" type="button" data-xa="pipe-retry" style="align-self:flex-start">Try again</button>` : ''}</section>`;
   const k = d.counts || {}, pc = pipeCounts(s.id, X.rows[s.id] || []) || {}, facts = [];
   if (k.check) facts.push(`<li class="you"><b>${commas(k.check)}</b> in the pipeline still waiting for your Companies House call (from before Go took only those you can email)</li>`);
+  if (c.out) facts.push(`<li><b>${commas(c.out)}</b> kept out by you (not a fit, not now, not UK): Go leaves them out</li>`);
   if (c.check + c.consent) facts.push(`<li><b>${commas(c.check + c.consent)}</b> left here until you decide (${esc([c.check ? c.check + ' to check' : '', c.consent ? c.consent + ' consent needed' : ''].filter(Boolean).join(', '))}): Go brings them in once they can be emailed</li>`);
   if (k.imported && pc['pipe-out']) facts.push(`<li><b>${commas(pc['pipe-out'])}</b> checked here, not in the pipeline (other sectors, opt-outs, duplicates)</li>`);
   if (c.pending) facts.push(`<li><b>${commas(c.pending)}</b> still being checked here: Go leaves them for next time</li>`);
@@ -702,6 +703,7 @@ function companyBrief(r) {
 }
 function pipeTags(r) {
   const pr = pipeRow(r);
+  if (!pr && C.keptOut(r)) return `<span class="ftag coral">KEPT OUT · ${esc(C.keptOut(r).toUpperCase())}</span>`;
   if (!pr) return pipeData(r.showId) && C.statusOf(r) !== 'pending' ? '<span class="ftag muted">NOT IN THE PIPELINE</span>' : '';
   const what = pr.touches ? (pr.touches === 1 ? 'EMAILED' : `EMAILED ×${pr.touches}`) : needsCall(pr) ? 'YOUR CALL' : String(pr.stage || '').toUpperCase();
   const k = needsCall(pr) ? 'yellow' : pr.touches ? 'mint' : /^Yes/.test(pr.can) ? 'sky' : /Consent|^No/.test(pr.can) ? 'coral' : 'muted';
@@ -718,10 +720,10 @@ function rowsHtml(s) {
   const shown = list.slice(0, X.limit);
   if (!shown.length) return pipeF && !pipeData(s.id) ? '<p class="sub" style="margin:0"><span class="spinner"></span> Reading the pipeline…</p>' : '<p class="sub" style="margin:0">No exhibitors match. Clear the search or choose All.</p>';
   return `<div class="tbox"><table class="xt xrows"><thead><tr><th scope="col">Exhibitor</th><th scope="col">Stand</th><th scope="col">Can email</th><th scope="col">Email</th><th scope="col">Company</th><th scope="col">Pipeline</th></tr></thead><tbody>
-    ${shown.map((r) => { const st = C.statusOf(r), n = C.listedCount(r), gone = !!pipeRow(r); return `<tr data-xrow="${esc(r.id)}" tabindex="0"${X.sel === r.id || gone ? ` class="${[X.sel === r.id ? 'sel' : '', gone ? 'gone' : ''].filter(Boolean).join(' ')}"` : ''}${X.sel === r.id ? ' aria-selected="true"' : ''}>
-      <td><div class="nm"><b>${esc(r.name)}</b><span>${esc([gone ? 'In the pipeline' : '', r.category, n >= 2 ? `in ${n} exhibitions` : '', !r.category ? r.domain : ''].filter(Boolean).join(' · '))}</span></div></td>
+    ${shown.map((r) => { const st = C.statusOf(r), n = C.listedCount(r), out = C.keptOut(r), gone = !!pipeRow(r) || !!out; return `<tr data-xrow="${esc(r.id)}" tabindex="0"${X.sel === r.id || gone ? ` class="${[X.sel === r.id ? 'sel' : '', gone ? 'gone' : ''].filter(Boolean).join(' ')}"` : ''}${X.sel === r.id ? ' aria-selected="true"' : ''}>
+      <td><div class="nm"><b>${esc(r.name)}</b><span>${esc([out ? 'Kept out: ' + out : gone ? 'In the pipeline' : '', r.category, n >= 2 ? `in ${n} exhibitions` : '', !r.category ? r.domain : ''].filter(Boolean).join(' · '))}</span></div></td>
       <td class="mono muted">${esc(r.stand || '')}</td>
-      <td><span class="st-txt"><span class="sd ${STATUS_DOT[st]}"></span>${esc(C.STATUS_LABEL[st])}</span></td>
+      <td><span class="st-txt"><span class="sd ${out ? 'pending' : STATUS_DOT[st]}"></span>${esc(out ? 'Kept out' : C.STATUS_LABEL[st])}</span></td>
       <td class="muted">${esc(C.workspaceShort(r) || '–')}</td>
       <td class="muted">${esc(companyBrief(r))}</td>
       <td><div class="tags">${pipeTags(r)}</div></td></tr>`; }).join('')}</tbody></table></div>
@@ -748,8 +750,9 @@ function detailHtml() {
     <p class="sub" style="margin:0;font-size:13px">${esc(C.emailRule(r))}</p>
     ${needsAnswer ? `<div class="ask"><p>Companies House has a ${r.legal === 'likely' ? 'likely' : 'possible'} match: <b>${esc(r.companyName || '')}</b>. Is it the same business?</p>
       <div class="row-acts"><button class="btn small light" type="button" data-xa="match-yes" data-id="${esc(r.id)}">Yes, same company</button><button class="btn small" type="button" data-xa="match-no" data-id="${esc(r.id)}">No, a different one</button></div></div>` : ''}
-    ${decideHtml(r)}
+    ${C.keptOut(r) ? '' : decideHtml(r)}
     ${yourCallHtml(r)}
+    ${keepOutHtml(r)}
     <div class="d-sec"><span class="eyebrow">Contact</span><dl class="kv">
       ${kv('Email', r.email ? `<span class="copy">${link('mailto:' + r.email, r.email)}${copy(r.email, 'Email')}</span>` : '', [C.emailKindLabel(r.emailKind), r.emailSrc ? 'from ' + r.emailSrc : ''].filter(Boolean).join(', '))}
       ${kv('Phone', r.phone ? link('tel:' + r.phone.replace(/\s+/g, ''), r.phone) : '', r.phone && r.phoneSrc ? 'From ' + r.phoneSrc : '')}
@@ -769,6 +772,45 @@ function detailHtml() {
     <div class="row-acts d-foot"><button class="btn small" type="button" data-xa="edit-row" data-id="${esc(r.id)}">Edit details</button><button class="btn small" type="button" data-xa="recheck" data-id="${esc(r.id)}">Check again</button>
       ${done ? `<button class="btn small" type="button" data-xa="explain" data-id="${esc(r.id)}">Why this result?</button>` : ''}<button class="btn small danger" type="button" data-xa="remove-row" data-id="${esc(r.id)}">Remove</button></div>`;
 }
+/** Release 12: keep a business out (Not a fit, Not now, Not a UK company): in Exhibitor Leads, and on its pipeline row. */
+const WON_STAGES = ['Customer', 'Event Pass', 'Opted out'];
+function keepOutHtml(r) {
+  if (C.statusOf(r) === 'pending') return '';
+  const out = C.keptOut(r), pr = pipeRow(r);
+  if (out) {
+    return `<div class="d-sec"><span class="eyebrow">Kept out</span><p class="sub" style="margin:0"><b>${esc(out)}</b>${r.keepOutAt ? ' since ' + esc(C.fmtDates(r.keepOutAt)) : ''}. Go leaves them out${pr ? `, and their pipeline row says ${esc(pr.stage)}` : ''}.</p>
+      <button class="btn small" type="button" data-xa="keep-undo" data-id="${esc(r.id)}" style="align-self:flex-start">Undo</button></div>`;
+  }
+  if (pr && WON_STAGES.indexOf(pr.stage) >= 0) return '';
+  return `<div class="d-sec"><span class="eyebrow">Keep out of emails</span><div class="row-acts">${C.KEEP_OUT.map((k) => `<button class="btn small" type="button" data-xa="keep" data-stage="${esc(k)}" data-id="${esc(r.id)}">${esc(k)}</button>`).join('')}</div>
+    <span class="note">Not a UK company covers this business at every show with the same website or email; the others, at shows in this sector.${pr ? ' Their pipeline row stops too.' : ' Go then leaves them out.'}</span></div>`;
+}
+async function setKeepOut(r, stage, btn) {
+  const before = C.keptOut(r);
+  await withBusy(btn, async () => {
+    let j;
+    try { j = await el('setKeepOut', stage ? { id: r.id, stage } : { id: r.id, clear: true }); }
+    catch (e) { toast(errText(e), true, 8000); return; }
+    const byShow = {};
+    (j.changed || []).forEach((x) => { (byShow[x.showId] = byShow[x.showId] || []).push(x); });
+    Object.keys(byShow).forEach((id) => { if (X.rows[id]) mergeRows(id, byShow[id]); });
+    mergeRows(j.row.showId || r.showId, [j.row]);
+    updateShowParts();
+    const others = (j.changed || []).filter((x) => x.id !== r.id).length;
+    const also = others ? ` (and ${plural(others, 'other listing')} of the same business)` : '';
+    // Every pipeline row of the business, at any show: HQ finds them and sets (or puts back) their Stage
+    let tail = '';
+    try {
+      const k = await hq('keepOut', Object.assign(stage ? { stage } : { clear: true, was: before }, { ids: (j.changed || []).map((x) => x.id).concat([r.id]), showId: r.showId, name: r.name, email: r.email || '', domain: r.domain || '' }));
+      const n = (k.keepOut || {}).rows || 0, sk = (k.keepOut || {}).skipped || 0;
+      if (n) tail = stage ? `, and ${n === 1 ? 'their pipeline row stops' : n + ' pipeline rows stop'}` : `, and ${n === 1 ? 'their pipeline row is back as it was' : n + ' pipeline rows are back as they were'}`;
+      if (sk) tail += `. ${plural(sk, 'pipeline row')} changed since in the sheet ${sk === 1 ? 'was' : 'were'} left as ${sk === 1 ? 'it is' : 'they are'}`;
+    } catch (e) { tail = stage ? `. The pipeline wasn’t changed (${errText(e)}): Undo, then mark them again to retry` : `. The pipeline wasn’t changed (${errText(e)}): put their Stage back in the sheet`; }
+    api.overviewStale(); loadPipe(r.showId); loadPipeAll(true);
+    toast(stage ? `${r.name}: ${stage}${also}. Go leaves them out${tail}` : `${r.name}: no longer kept out${also}${tail}`, /wasn’t changed/.test(tail), 8000);
+  });
+}
+
 /** Release 11: Go brings in only those you can email, so the call is made here: the company, or consent you got. */
 function decideHtml(r) {
   if (C.statusOf(r) === 'pending') return '';
@@ -829,7 +871,7 @@ async function stopOnConsent(row, said) {
 function yourCallHtml(r) {
   const d = pipeData(r.showId), pr = pipeRow(r);
   if (!d) return `<div class="d-sec"><span class="eyebrow">In the pipeline</span><p class="sub" style="margin:0">${(X.pipe[r.showId] || {}).err ? esc(X.pipe[r.showId].err) : 'Reading the pipeline…'}</p></div>`;
-  if (!pr) return `<div class="d-sec"><span class="eyebrow">In the pipeline</span><p class="sub" style="margin:0">Not in the pipeline. ${C.statusOf(r) === 'pending' ? 'Once it’s checked here, Go brings it in if it can be emailed.' : C.statusOf(r) === 'corporate' ? 'Go brings it in, if the pipeline’s rules allow.' : 'Go leaves it here until you decide above.'}</p></div>`;
+  if (!pr) return `<div class="d-sec"><span class="eyebrow">In the pipeline</span><p class="sub" style="margin:0">Not in the pipeline. ${C.statusOf(r) === 'pending' ? 'Once it’s checked here, Go brings it in if it can be emailed.' : C.keptOut(r) ? 'You’ve kept them out, so Go leaves them out.' : C.statusOf(r) === 'corporate' ? 'Go brings it in, if the pipeline’s rules allow.' : 'Go leaves it here until you decide above.'}</p></div>`;
   const facts = `CODE ${esc(String(pr.code).toUpperCase())} · STAGE ${esc(String(pr.stage).toUpperCase())}${pr.touches ? ` · ${pr.touches} EMAIL${pr.touches > 1 ? 'S' : ''} SENT` : ''}${pr.batch ? ` · ${esc(pr.batch)}` : ''}`;
   if (needsCall(pr)) {
     return `<div class="yourcall"><span class="t-top"><span class="t-tag">IN THE PIPELINE · YOUR CALL</span></span><b class="t-title">Can email: Check${pr.priority ? ` (${esc(pr.priority)})` : ''}</b>
@@ -914,10 +956,12 @@ function openGoResult(s, j, asked) {
       ${li(g.refreshed, 'already here and now Yes (Ltd), from the checks in Exhibitor Leads')}${li(g.held, 'already here and now not emailed, as you decided in Exhibitor Leads')}
       ${li(g.twins, 'more rows of those businesses, from other shows, held the same way')}${li(g.here, 'were already in this show')}${li(g.merged, 'extra listings for the same business, merged')}
       ${li(g.optedOut, 'kept out because their email opted out')}${li(g.waiting, 'still being checked in Exhibitor Leads: Go again once they’re done')}${li(g.moved, 'left as they were: Prospects moved while saving, so Go again')}
+      ${li(g.keptOut, 'kept out, as you marked them')}${li(g.kept, 'already here, now kept out as you marked them in Exhibitors')}
       ${ny.check + ny.consent + ny.noEmail ? `<li><b>${commas(ny.check + ny.consent + ny.noEmail)}</b> left here until you decide: ${esc([ny.check ? ny.check + ' to check' : '', ny.consent ? ny.consent + ' consent needed' : '', ny.noEmail ? ny.noEmail + ' with no email' : ''].filter(Boolean).join(', '))}</li>` : ''}
       <li>P1 <b>${commas(t.P1)}</b> · P2 <b>${commas(t.P2)}</b> · P3 <b>${commas(t.P3)}</b> · P4 <b>${commas(t.P4)}</b> · P5 <b>${commas(t.P5)}</b></li>
       <li>${g.going ? `Going${g.days && g.days !== 'all' ? ': ' + esc(g.days) : ''}` : 'Not going'}${g.page ? ` · links open /showsum/${esc(g.page)}/` : ''}</li></ul>
-    ${!(g.fix >= 48) ? '<p class="banner" style="margin:0"><span class="grow">The pipeline’s script is older than fix-48, so To check and Consent needed came in too. Paste its new script, then use Tidy in Settings.</span></p>' : ''}
+    ${!(g.fix >= 48) ? '<p class="banner" style="margin:0"><span class="grow">The pipeline’s script is older than fix-48, so To check and Consent needed came in too. Paste its new script, then use Tidy in Settings.</span></p>'
+      : !(g.fix >= 49) ? '<p class="banner" style="margin:0"><span class="grow">The pipeline’s script is older than fix-49, so exhibitors you kept out may have come in. Paste its new script, then Go again.</span></p>' : ''}
     ${fastLine}
     <div class="actions d-acts"><button class="btn" type="button" data-xa="close">Done</button><a class="btn yellow" href="#/overview" data-xa="close">Open the Departures board</a></div>`);
 }
@@ -1426,6 +1470,8 @@ async function act(name, t) {
     case 'match-yes': case 'match-no': await withBusy(t, async () => { try { const j = await el('confirmMatch', { id: d.id, yes: name === 'match-yes' }); mergeRows(j.row.showId || X.route.id, [j.row]); updateShowParts(); toast(name === 'match-yes' ? 'Confirmed as the same company' : 'Marked as no company'); followConfirm(j.row); } catch (e) { toast(errText(e), true); } }); break;
     case 'find-co': openPicker(d.id); break;
     case 'consent': { const r = rowById(d.id); if (r) openConsent(r); break; }
+    case 'keep': { const r = rowById(d.id); if (r) await setKeepOut(r, d.stage, t); break; }
+    case 'keep-undo': { const r = rowById(d.id); if (r) await setKeepOut(r, '', t); break; }
     case 'consent-clear': openConfirm('Remove their consent?', 'Go won’t bring them in again, and if they’re in the pipeline on consent, it stops emailing them.', 'consent-clear-yes', 'Remove consent', d.id, true); break;
     case 'consent-clear-yes': { const r = rowById(d.id); if (r) await saveConsent(r, { clear: true }, t); break; }
     case 'company-no': openCompanyNo(d.id); break;
