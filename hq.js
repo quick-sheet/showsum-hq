@@ -2,8 +2,8 @@
 (function () {
   'use strict';
 
-  var APP_VERSION = 12;      // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
-  var EXPECT_BUILD = 12;     // the HQ Apps Script release this app expects
+  var APP_VERSION = 13;      // bump with hq.js?v= / hq.css?v= in index.html and the cache name in sw.js
+  var EXPECT_BUILD = 13;     // the HQ Apps Script release this app expects
   var AP_PLAN = 10;          // the pipeline's HQAutopilot.gs must be at least this release to send by HQ's current schedule
   var LS = { config: 'hq.config', links: 'hq.links', user: 'hq.user', name: 'hq.name' };
   var SS_TOKEN = 'hq.idToken';

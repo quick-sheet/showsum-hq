@@ -644,6 +644,11 @@ function pipePanel(s, c) {
   if (k.imported && pc['pipe-out']) facts.push(`<li><b>${commas(pc['pipe-out'])}</b> checked here, not in the pipeline (other sectors, opt-outs, duplicates)</li>`);
   if (c.pending) facts.push(`<li><b>${commas(c.pending)}</b> still being checked here: Go leaves them for next time</li>`);
   if (d.show) facts.push(`<li>${d.show.attending ? `You’re going${d.show.visitDay && d.show.visitDay !== 'all' ? ': ' + esc(d.show.visitDay) : ''}` : 'Not going'}${d.show.page ? ` · emails link to /showsum/${esc(d.show.page)}/` : ''}</li>`);
+  const nd = d.notDue || {};
+  if (nd.total) {
+    const WHY = { resting: 'resting after another show’s email' + (nd.restUntil ? ` (to ${C.fmtDates(nd.restUntil)} at most)` : ''), 'yearly cap': 'at the yearly cap', 'emailed for another show': 'emailed for another show in this sector', 'had that email': 'had that email already', other: 'not due for another reason' };
+    facts.push(`<li><b>${commas(nd.total)}</b> in the pipeline but not due: ${esc((nd.by || []).map((x) => x.n + ' ' + (WHY[x.why] || x.why.toLowerCase())).join(', '))}. Open one to see why</li>`);
+  }
   if (d.firstReady) facts.push(`<li><b>${commas(d.firstReady)}</b> due a first email, not in a batch${d.day2First ? ` (${d.day2First === d.firstReady ? 'all' : commas(d.day2First) + ' of them'} Day 2 as their first, after the show)` : ''}</li>`);
   const deps = (d.batches || []).map((b) => `<a class="dep-chip${b.status === 'Started' ? '' : ' idle'}" href="#/overview"><div><b>${esc(b.id)} · ${esc(STEP_WORDS[b.stage] || b.stage || '')}</b><span>${esc(plural(b.members, 'member'))}${b.dueNow ? ` · ${commas(b.dueNow)} due now` : ''}</span></div><span class="chip ${b.status === 'Started' ? 'live' : b.status === 'Paused' ? 'warn' : 'dim'}">${esc(b.status === 'Ready' ? 'Not started' : b.status)}</span></a>`).join('');
   const acts = [];
@@ -705,7 +710,9 @@ function pipeTags(r) {
   const pr = pipeRow(r);
   if (!pr && C.keptOut(r)) return `<span class="ftag coral">KEPT OUT · ${esc(C.keptOut(r).toUpperCase())}</span>`;
   if (!pr) return pipeData(r.showId) && C.statusOf(r) !== 'pending' ? '<span class="ftag muted">NOT IN THE PIPELINE</span>' : '';
-  const what = pr.touches ? (pr.touches === 1 ? 'EMAILED' : `EMAILED ×${pr.touches}`) : needsCall(pr) ? 'YOUR CALL' : String(pr.stage || '').toUpperCase();
+  // Release 13: never emailed and not due: why, rather than "NEW"
+  const HOLD = { resting: pr.restUntil ? 'RESTING TO ' + C.fmtDates(pr.restUntil).toUpperCase() : 'RESTING', 'yearly cap': 'YEARLY CAP', 'emailed for another show': 'EMAILED FOR ANOTHER SHOW', 'had that email': 'HAD THAT EMAIL', other: 'NOT DUE' };
+  const what = pr.touches ? (pr.touches === 1 ? 'EMAILED' : `EMAILED ×${pr.touches}`) : needsCall(pr) ? 'YOUR CALL' : pr.hold && HOLD[pr.hold] ? HOLD[pr.hold] : String(pr.stage || '').toUpperCase();
   const k = needsCall(pr) ? 'yellow' : pr.touches ? 'mint' : /^Yes/.test(pr.can) ? 'sky' : /Consent|^No/.test(pr.can) ? 'coral' : 'muted';
   return `<span class="ftag ${k}">${esc([pr.priority, what].filter(Boolean).join(' · '))}</span>${pr.batch ? `<span class="ftag">${esc(pr.batch)}</span>` : ''}`;
 }
@@ -956,7 +963,7 @@ function openGoResult(s, j, asked) {
       ${li(g.refreshed, 'already here and now Yes (Ltd), from the checks in Exhibitor Leads')}${li(g.held, 'already here and now not emailed, as you decided in Exhibitor Leads')}
       ${li(g.twins, 'more rows of those businesses, from other shows, held the same way')}${li(g.here, 'were already in this show')}${li(g.merged, 'extra listings for the same business, merged')}
       ${li(g.optedOut, 'kept out because their email opted out')}${li(g.waiting, 'still being checked in Exhibitor Leads: Go again once they’re done')}${li(g.moved, 'left as they were: Prospects moved while saving, so Go again')}
-      ${li(g.keptOut, 'kept out, as you marked them')}${li(g.kept, 'already here, now kept out as you marked them in Exhibitors')}
+      ${li(g.mended, 'Exhibitor IDs mended: the sheet had turned them into numbers')}${li(g.keptOut, 'kept out, as you marked them')}${li(g.kept, 'already here, now kept out as you marked them in Exhibitors')}
       ${ny.check + ny.consent + ny.noEmail ? `<li><b>${commas(ny.check + ny.consent + ny.noEmail)}</b> left here until you decide: ${esc([ny.check ? ny.check + ' to check' : '', ny.consent ? ny.consent + ' consent needed' : '', ny.noEmail ? ny.noEmail + ' with no email' : ''].filter(Boolean).join(', '))}</li>` : ''}
       <li>P1 <b>${commas(t.P1)}</b> · P2 <b>${commas(t.P2)}</b> · P3 <b>${commas(t.P3)}</b> · P4 <b>${commas(t.P4)}</b> · P5 <b>${commas(t.P5)}</b></li>
       <li>${g.going ? `Going${g.days && g.days !== 'all' ? ': ' + esc(g.days) : ''}` : 'Not going'}${g.page ? ` · links open /showsum/${esc(g.page)}/` : ''}</li></ul>
